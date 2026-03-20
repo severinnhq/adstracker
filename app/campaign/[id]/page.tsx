@@ -13,12 +13,14 @@ import { getCampaign, updateCampaign } from "@/lib/storage";
 import Link from "next/link";
 
 const AWARENESS_OPTIONS: AwarenessLevel[] = [
+  "Unaware",
   "Problem aware",
   "Solution aware",
   "Product aware",
   "Most aware",
   "Other",
 ];
+
 
 const TEST_FOCUS_OPTIONS: { id: TestFocus; label: string; color: string }[] = [
   { id: "desire", label: "Desire", color: "border-orange-500 bg-orange-500/15" },
@@ -38,11 +40,16 @@ const TEST_FOCUS_OPTIONS: { id: TestFocus; label: string; color: string }[] = [
 
 const FORMAT_OPTIONS: FormatType[] = [
   "UGC",
+  "AI Vid",
+  "VSL",
+  "Slideshow",
   "Static",
+  "Native Image",
   "Carousel",
   "Story",
   "Other",
 ];
+
 
 function focusColor(f: TestFocus): string {
   switch (f) {

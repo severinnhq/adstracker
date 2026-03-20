@@ -2,6 +2,7 @@ export type Niche = "Pet" | "Health" | "Beauty" | "Babies" | "Tech Gadgets";
 export const NICHES: Niche[] = ["Pet", "Health", "Beauty", "Babies", "Tech Gadgets"];
 
 export type AwarenessLevel =
+  | "Unaware"
   | "Problem aware"
   | "Solution aware"
   | "Product aware"
@@ -16,7 +17,17 @@ export type TestFocus =
   | "pricing"
   | "format";
 
-export type FormatType = "UGC" | "Static" | "Carousel" | "Story" | "Other";
+export type FormatType =
+  | "UGC"
+  | "AI Vid"
+  | "VSL"
+  | "Slideshow"
+  | "Static"
+  | "Native Image"
+  | "Carousel"
+  | "Story"
+  | "Other";
+
 
 export interface Ad {
   id: string;
