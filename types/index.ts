@@ -51,3 +51,25 @@ export interface Campaign {
   ads: Ad[];
   createdAt: string;
 }
+
+export interface CboPhase {
+  id: string;
+  waveId: string;
+  type: "desire" | "angle" | "awareness" | "advertorial" | "format";
+  position: number;
+  status: "pending" | "running" | "done";
+  winnerAds: string[];
+  notes: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface CboWave {
+  id: string;
+  campaignId: string;
+  name: string;
+  status: "active" | "completed" | "archived";
+  phases: CboPhase[];
+  createdAt: string;
+}

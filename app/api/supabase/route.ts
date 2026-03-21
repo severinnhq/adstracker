@@ -53,6 +53,30 @@ export async function POST(req: NextRequest) {
           .single();
         break;
 
+      case "fetchWaves":
+        result = await supabase
+          .from("cbo_waves")
+          .select("*")
+          .eq("campaign_id", params.campaignId)
+          .order("created_at", { ascending: true });
+        break;
+
+      case "fetchPhases":
+        result = await supabase
+          .from("cbo_phases")
+          .select("*")
+          .eq("wave_id", params.waveId)
+          .order("position", { ascending: true });
+        break;
+
+      case "fetchAllPhases":
+        result = await supabase
+          .from("cbo_phases")
+          .select("*")
+          .in("wave_id", params.waveIds)
+          .order("position", { ascending: true });
+        break;
+
       case "rpc":
         result = await supabase.rpc(params.fn, params.args);
         break;
