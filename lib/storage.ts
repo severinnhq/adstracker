@@ -69,7 +69,7 @@ export async function deleteCampaign(id: string): Promise<void> {
   }
 }
 
-// ─── Ad helpers (campaign detail page) ───
+// ─── Ad helpers (campaign detail page ) ───
 
 export async function fetchCampaignWithAds(id: string): Promise<Campaign | null> {
   const { data: campaignRow, error: cErr } = await supabase
