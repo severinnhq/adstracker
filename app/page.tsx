@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect, MouseEvent } from "react";
 import { Campaign, NICHES, Niche } from "@/types";
 import { getCampaigns, saveCampaigns, deleteCampaign } from "@/lib/storage";
