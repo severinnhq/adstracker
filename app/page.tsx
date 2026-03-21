@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, MouseEvent } from "react";
 import { Campaign, NICHES, Niche } from "@/types";
 import { getCampaigns, saveCampaigns, deleteCampaign } from "@/lib/storage";
-import { generateId, nicheEmojis } from "@/lib/utils";
+import { nicheEmojis } from "@/lib/utils";
 import Link from "next/link";
 
 export default function Home() {
@@ -13,10 +13,33 @@ export default function Home() {
   const [niche, setNiche] = useState<Niche>("Health");
   const [filter, setFilter] = useState<Niche | "All">("All");
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    setCampaigns(getCampaigns());
-    setMounted(true);
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const data = await getCampaigns();
+        if (!cancelled) {
+          setCampaigns(data);
+          setMounted(true);
+        }
+      } catch (err: any) {
+        console.error("load campaigns failed", err);
+        if (!cancelled) setErrorMsg(err?.message || "Failed to load campaigns");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!mounted) return <div className="min-h-screen bg-zinc-950" />;
@@ -24,28 +47,45 @@ export default function Home() {
   const filtered =
     filter === "All" ? campaigns : campaigns.filter((c) => c.niche === filter);
 
-  const create = () => {
+  const create = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const c: Campaign = {
-      id: generateId(),
+    setErrorMsg(null);
+
+    const temp: Campaign = {
+      id: "temp",
       name: trimmed,
       niche,
       ads: [],
       createdAt: new Date().toISOString(),
     };
-    const updated = [...campaigns, c];
-    setCampaigns(updated);
-    saveCampaigns(updated);
-    setName("");
+
+    const optimistic = [...campaigns, temp];
+    setCampaigns(optimistic);
     setShowNew(false);
+    setName("");
+
+    try {
+      const updated = await saveCampaigns(optimistic);
+      setCampaigns(updated);
+    } catch (err: any) {
+      console.error("saveCampaigns failed", err);
+      setErrorMsg(err?.message || "Failed to save campaign");
+      setCampaigns(campaigns);
+    }
   };
 
-  const remove = (id: string, e: React.MouseEvent<HTMLButtonElement>) => {
+  const remove = async (id: string, e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (!window.confirm("Delete this campaign?")) return;
-    deleteCampaign(id);
-    setCampaigns(getCampaigns());
+    setErrorMsg(null);
+    try {
+      await deleteCampaign(id);
+      setCampaigns((prev) => prev.filter((c) => c.id !== id));
+    } catch (err: any) {
+      console.error("deleteCampaign failed", err);
+      setErrorMsg(err?.message || "Failed to delete campaign");
+    }
   };
 
   return (
@@ -55,7 +95,8 @@ export default function Home() {
           <h1 className="text-xl font-bold">🎯 Ad Tracker</h1>
           <button
             onClick={() => setShowNew(true)}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-sm font-medium hover:bg-blue-500"
+            className="px-4 py-2 rounded-lg bg-blue-600 text-sm font-medium hover:bg-blue-500 disabled:opacity-50"
+            disabled={loading}
           >
             + New Campaign
           </button>
@@ -63,6 +104,12 @@ export default function Home() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-6">
+        {errorMsg && (
+          <div className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/40 rounded-md px-3 py-2">
+            {errorMsg}
+          </div>
+        )}
+
         <div className="flex gap-2 mb-6 flex-wrap">
           <button
             onClick={() => setFilter("All")}
@@ -123,7 +170,8 @@ export default function Home() {
                 </button>
                 <button
                   onClick={create}
-                  className="flex-1 py-2 rounded-lg bg-blue-600 text-sm font-medium"
+                  className="flex-1 py-2 rounded-lg bg-blue-600 text-sm font-medium disabled:opacity-50"
+                  disabled={!name.trim()}
                 >
                   Create
                 </button>
@@ -135,7 +183,7 @@ export default function Home() {
         {filtered.length === 0 ? (
           <div className="text-center py-20 text-zinc-500">
             <p className="text-4xl mb-3">📊</p>
-            <p>No campaigns yet</p>
+            <p>{loading ? "Loading campaigns…" : "No campaigns yet"}</p>
           </div>
         ) : (
           <div className="space-y-3">
