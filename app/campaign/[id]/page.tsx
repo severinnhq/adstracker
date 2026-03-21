@@ -50,6 +50,8 @@ const FORMAT_OPTIONS: FormatType[] = [
   "Other",
 ];
 
+const DURATION_OPTIONS = [3, 5, 7, 10, 14, 21, 30];
+
 function focusColor(f: TestFocus): string {
   switch (f) {
     case "desire": return "border-orange-500 bg-orange-500/20 text-orange-200";
@@ -61,12 +63,101 @@ function focusColor(f: TestFocus): string {
   }
 }
 
+function toLocalInputValue(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getAdProgress(ad: Ad): {
+  daysPassed: number;
+  totalHoursElapsed: number;
+  daysLeft: number;
+  hoursLeft: number;
+  percent: number;
+  isComplete: boolean;
+} {
+  const start = new Date(ad.createdAt).getTime();
+  const now = Date.now();
+  const elapsedMs = now - start;
+  const totalMs = ad.duration * 24 * 60 * 60 * 1000;
+
+  const totalHoursElapsed = Math.floor(elapsedMs / (1000 * 60 * 60));
+  const rawRemainingHours = Math.max(ad.duration * 24 - totalHoursElapsed, 0);
+
+  const daysLeft =
+    rawRemainingHours > 48
+      ? 3
+      : rawRemainingHours > 24
+      ? 2
+      : rawRemainingHours > 0
+      ? 1
+      : 0;
+
+  const hoursLeft = rawRemainingHours;
+  const percent = Math.min(Math.round((elapsedMs / totalMs) * 100), 100);
+  const daysPassed = Math.min(ad.duration, Math.floor(totalHoursElapsed / 24));
+
+  return {
+    daysPassed,
+    totalHoursElapsed,
+    daysLeft,
+    hoursLeft,
+    percent,
+    isComplete: rawRemainingHours === 0,
+  };
+}
+
+function ProgressBar({ ad }: { ad: Ad }) {
+  const { daysPassed, totalHoursElapsed, daysLeft, hoursLeft, percent, isComplete } =
+    getAdProgress(ad);
+
+  const barColor = isComplete
+    ? "bg-green-500"
+    : percent > 66
+    ? "bg-yellow-500"
+    : "bg-blue-500";
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
+        <span>
+          Day {daysPassed}/{ad.duration} · {totalHoursElapsed}h elapsed
+        </span>
+        <span>
+          {isComplete ? (
+            <span className="text-green-400 font-semibold">✓ Complete</span>
+          ) : (
+            <span>{daysLeft}d · {hoursLeft}h left</span>
+          )}
+        </span>
+      </div>
+      <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="flex justify-between mt-1">
+        {Array.from({ length: ad.duration }, (_, i) => (
+          <div
+            key={i}
+            className={`w-1.5 h-1.5 rounded-full ${
+              i < daysPassed ? barColor : "bg-zinc-700"
+            }`}
+            title={`Day ${i + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CampaignPage() {
   const params = useParams();
   const id = params?.id as string | undefined;
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,6 +171,8 @@ export default function CampaignPage() {
   const [notes, setNotes] = useState<string>("");
   const [format, setFormat] = useState<FormatType>("UGC");
   const [formTestFocus, setFormTestFocus] = useState<TestFocus>("desire");
+  const [duration, setDuration] = useState<number>(7);
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString());
 
   const [globalFocus, setGlobalFocus] = useState<TestFocus | "all">("all");
 
@@ -94,7 +187,7 @@ export default function CampaignPage() {
   const reload = async () => {
     if (!id) return;
     try {
-      const c = await fetchCampaignWithAds(id);
+      const c = await fetchCampaignWithAds(id as string);
       if (c) setCampaign(c);
     } catch (err: any) {
       console.error("reload error:", err);
@@ -108,17 +201,13 @@ export default function CampaignPage() {
       setLoading(true);
       setError(null);
       try {
-        console.log("Fetching campaign with id:", id);
         const c = await fetchCampaignWithAds(id as string);
-
-        console.log("Fetched campaign:", c);
         setCampaign(c);
       } catch (err: any) {
         console.error("fetchCampaignWithAds failed:", err);
         setError(err?.message || "Unknown error");
       } finally {
         setLoading(false);
-        setMounted(true);
       }
     }
 
@@ -128,7 +217,7 @@ export default function CampaignPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-400 flex items-center justify-center">
-        Loading… (id: {id || "none"})
+        Loading…
       </div>
     );
   }
@@ -148,7 +237,7 @@ export default function CampaignPage() {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         <div className="text-center">
-          <p className="text-zinc-400 mb-4">Campaign not found (id: {id})</p>
+          <p className="text-zinc-400 mb-4">Campaign not found</p>
           <Link href="/" className="text-blue-400 hover:underline">← Back</Link>
         </div>
       </div>
@@ -165,6 +254,8 @@ export default function CampaignPage() {
     setNotes("");
     setFormat("UGC");
     setFormTestFocus("desire");
+    setDuration(7);
+    setStartDate(new Date().toISOString());
     setShowForm(true);
   };
 
@@ -178,6 +269,8 @@ export default function CampaignPage() {
     setNotes("");
     setFormat(parent.format || "UGC");
     setFormTestFocus(parent.testFocus || "desire");
+    setDuration(parent.duration || 7);
+    setStartDate(new Date().toISOString());
     setShowForm(true);
   };
 
@@ -191,6 +284,8 @@ export default function CampaignPage() {
     setNotes(ad.notes || "");
     setFormat(ad.format || "UGC");
     setFormTestFocus(ad.testFocus || "desire");
+    setDuration(ad.duration || 7);
+    setStartDate(ad.createdAt);
     setShowForm(true);
   };
 
@@ -211,6 +306,8 @@ export default function CampaignPage() {
           notes,
           format,
           testFocus: formTestFocus,
+          duration,
+          createdAt: startDate,
         });
       } else {
         await insertAd(campaign.id, {
@@ -223,7 +320,8 @@ export default function CampaignPage() {
           testFocus: formTestFocus,
           status: "testing",
           parentId: variantParentId || undefined,
-          createdAt: new Date().toISOString(),
+          createdAt: startDate,
+          duration,
         });
       }
 
@@ -285,39 +383,139 @@ export default function CampaignPage() {
     <div className="min-h-screen bg-zinc-950 text-white">
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-full max-w-lg">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="font-bold mb-4">
               {editingAd ? "Edit Ad" : variantParentId ? "New Variant" : "New Ad"}
             </h2>
             <div className="space-y-3 mb-4">
-              <input value={name || ""} onChange={(e) => setName(e.target.value)} placeholder="Ad name / label" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-              <input value={desire || ""} onChange={(e) => setDesire(e.target.value)} placeholder="Desire" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-              <input value={angle || ""} onChange={(e) => setAngle(e.target.value)} placeholder="Angle" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+              <input
+                value={name || ""}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ad name / label"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <input
+                value={desire || ""}
+                onChange={(e) => setDesire(e.target.value)}
+                placeholder="Desire"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <input
+                value={angle || ""}
+                onChange={(e) => setAngle(e.target.value)}
+                placeholder="Angle"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-xs text-zinc-400">Start:</span>
+                <input
+                  type="datetime-local"
+                  value={toLocalInputValue(startDate)}
+                  onChange={(e) => {
+                    const iso = new Date(e.target.value).toISOString();
+                    setStartDate(iso);
+                    if (editingAd) {
+                      setEditingAd({ ...editingAd, createdAt: iso });
+                    }
+                  }}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-zinc-400">Awareness:</span>
-                  <select value={awareness} onChange={(e) => setAwareness(e.target.value as AwarenessLevel)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
-                    {AWARENESS_OPTIONS.map((a) => (<option key={a} value={a}>{a}</option>))}
+                  <select
+                    value={awareness}
+                    onChange={(e) => setAwareness(e.target.value as AwarenessLevel)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                  >
+                    {AWARENESS_OPTIONS.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-zinc-400">Format:</span>
-                  <select value={format} onChange={(e) => setFormat(e.target.value as FormatType)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
-                    {FORMAT_OPTIONS.map((f) => (<option key={f} value={f}>{f}</option>))}
+                  <select
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value as FormatType)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                  >
+                    {FORMAT_OPTIONS.map((f) => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-zinc-400">Test focus:</span>
-                  <select value={formTestFocus} onChange={(e) => setFormTestFocus(e.target.value as TestFocus)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
-                    {TEST_FOCUS_OPTIONS.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
+                  <select
+                    value={formTestFocus}
+                    onChange={(e) => setFormTestFocus(e.target.value as TestFocus)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                  >
+                    {TEST_FOCUS_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
-              <textarea value={notes || ""} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" rows={3} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none" />
+
+              <div>
+                <span className="text-xs text-zinc-400 block mb-1.5">Test duration:</span>
+                <div className="flex gap-2 flex-wrap">
+                  {DURATION_OPTIONS.map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDuration(d)}
+                      className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                        duration === d
+                          ? "bg-blue-600 border-blue-500 text-white"
+                          : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {d}d
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={duration}
+                    onChange={(e) =>
+                      setDuration(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
+                    }
+                    className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <textarea
+                value={notes || ""}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Notes"
+                rows={3}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
+              />
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { setShowForm(false); setEditingAd(null); setVariantParentId(null); }} className="flex-1 py-2 rounded-lg border border-zinc-700 text-sm text-zinc-400">Cancel</button>
-              <button onClick={handleSaveAd} className="flex-1 py-2 rounded-lg bg-blue-600 text-sm font-medium">Save</button>
+              <button
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingAd(null);
+                  setVariantParentId(null);
+                }}
+                className="flex-1 py-2 rounded-lg border border-zinc-700 text-sm text-zinc-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAd}
+                className="flex-1 py-2 rounded-lg bg-blue-600 text-sm font-medium"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
@@ -339,7 +537,9 @@ export default function CampaignPage() {
           <input value={filterAngle} onChange={(e) => setFilterAngle(e.target.value)} placeholder="Filter by angle" className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 flex-1 min-w-[140px]" />
           <select value={filterAwareness} onChange={(e) => setFilterAwareness(e.target.value as AwarenessLevel | "All")} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
             <option value="All">All awareness</option>
-            {AWARENESS_OPTIONS.map((a) => (<option key={a} value={a}>{a}</option>))}
+            {AWARENESS_OPTIONS.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
           </select>
           <label className="flex items-center gap-1 text-zinc-400">
             <input type="checkbox" checked={showOnlyWinners} onChange={(e) => setShowOnlyWinners(e.target.checked)} className="accent-blue-500" />
@@ -381,6 +581,8 @@ export default function CampaignPage() {
                           </div>
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${focusColor(ad.testFocus)}`}>⚡ {ad.testFocus}</span>
                         </div>
+
+                        <ProgressBar ad={ad} />
 
                         <div className={`rounded-md p-3 border ${isGlobalFocus("desire") ? "border-orange-500 bg-orange-500/10" : "border-zinc-800 bg-zinc-900/80"}`}>
                           <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-300 mb-1">Desire</div>
@@ -435,6 +637,9 @@ export default function CampaignPage() {
                                 {v.status === "winner" && <span className="text-green-400 text-[11px]">🏆</span>}
                                 {v.status === "loser" && <span className="text-red-400 text-[11px]">✖</span>}
                                 <span className="font-medium break-words">{v.name}</span>
+                              </div>
+                              <div className="my-2">
+                                <ProgressBar ad={v} />
                               </div>
                               {v.notes && <div className="text-[11px] text-zinc-300 break-words">{v.notes}</div>}
                             </div>

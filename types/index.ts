@@ -38,9 +38,10 @@ export interface Ad {
   notes: string;
   format: FormatType;
   testFocus: TestFocus;
-  status: "testing" | "winner" | "loser";
+  status: string;
   parentId?: string;
   createdAt: string;
+  duration: number; // days
 }
 
 export interface Campaign {
