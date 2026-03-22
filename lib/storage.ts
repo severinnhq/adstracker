@@ -6,7 +6,68 @@ import type {
   FormatType,
   CboWave,
   CboPhase,
+  CboFolder,
 } from "@/types";
+
+import type { CboItemCopy } from "@/types";
+
+export async function fetchItemCopies(
+  folderId: string
+): Promise<CboItemCopy[]> {
+  const data = await api("fetchItemCopies", { folderId });
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    folderId: row.folder_id,
+    title: row.title,
+    content: row.content,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function insertItemCopy(payload: {
+  folderId: string;
+  title: string;
+  content: string;
+}): Promise<CboItemCopy> {
+  const data = await api("insertItemCopy", {
+    payload: {
+      folder_id: payload.folderId,
+      title: payload.title,
+      content: payload.content,
+    },
+  });
+  return {
+    id: data.id,
+    folderId: data.folder_id,
+    title: data.title,
+    content: data.content,
+    createdAt: data.created_at,
+  };
+}
+
+export async function updateItemCopy(
+  id: string,
+  payload: Partial<{ title: string; content: string }>
+) {
+  await api("updateItemCopy", { id, payload });
+}
+
+export async function deleteItemCopy(id: string) {
+  await api("deleteItemCopy", { id });
+}
+
+export async function attachCopiesToAd(
+  adId: string,
+  copyIds: string[]
+): Promise<void> {
+  if (!copyIds.length) return;
+  await api("insertAdCopies", {
+    rows: copyIds.map((cid) => ({ ad_id: adId, copy_id: cid })),
+  });
+}
+
+
+
 
 async function api(action: string, params: any = {}) {
   const res = await fetch("/api/supabase", {
@@ -75,6 +136,7 @@ export async function fetchCampaignWithAds(id: string): Promise<Campaign | null>
       name: row.name,
       desire: row.desire,
       angle: row.angle,
+      waveId: row.wave_id || null,
       awareness: row.awareness as AwarenessLevel,
       notes: row.notes ?? "",
       format: (row.format ?? "UGC") as FormatType,
@@ -94,38 +156,28 @@ export async function fetchCampaignWithAds(id: string): Promise<Campaign | null>
   };
 }
 
-export async function insertAd(campaignId: string, ad: Omit<Ad, "id">): Promise<Ad> {
+export async function insertAd(campaignId: string, payload: {
+  name: string; desire: string; angle: string; awareness: AwarenessLevel;
+  notes?: string; format: FormatType; testFocus: TestFocus;
+  status: string; parentId?: string; createdAt?: string; duration: number;
+  waveId?: string | null;  // ← ADD
+}): Promise<string> {
   const data = await api("insertAd", {
     payload: {
       campaign_id: campaignId,
-      name: ad.name,
-      desire: ad.desire,
-      angle: ad.angle,
-      awareness: ad.awareness,
-      notes: ad.notes,
-      format: ad.format,
-      test_focus: ad.testFocus,
-      status: ad.status,
-      parent_id: ad.parentId ?? null,
-      created_at: ad.createdAt,
-      duration: ad.duration,
+      wave_id: payload.waveId || null,  // ← ADD
+      name: payload.name, desire: payload.desire, angle: payload.angle,
+      awareness: payload.awareness, notes: payload.notes || "",
+      format: payload.format, test_focus: payload.testFocus,
+      status: payload.status, parent_id: payload.parentId || null,
+      created_at: payload.createdAt || new Date().toISOString(),
+      duration: payload.duration,
     },
   });
-  return {
-    id: data.id,
-    name: data.name,
-    desire: data.desire,
-    angle: data.angle,
-    awareness: data.awareness as AwarenessLevel,
-    notes: data.notes ?? "",
-    format: (data.format ?? "UGC") as FormatType,
-    testFocus: (data.test_focus ?? "desire") as TestFocus,
-    status: data.status,
-    parentId: data.parent_id ?? undefined,
-    createdAt: data.created_at,
-    duration: data.duration ?? 7,
-  };
+  return data.id;
 }
+
+  
 
 export async function updateAd(ad: Ad): Promise<void> {
   await api("rpc", {
@@ -231,4 +283,97 @@ export async function deleteWave(waveId: string): Promise<void> {
 
 export async function updateWaveStatus(waveId: string, status: string): Promise<void> {
   await api("rpc", { fn: "update_cbo_wave_status", args: { p_wave_id: waveId, p_status: status } });
+}
+
+
+export async function fetchFolders(waveId: string): Promise<CboFolder[]> {
+  const data = await api("fetchFolders", { waveId });
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    waveId: row.wave_id,
+    parentId: row.parent_id,
+    name: row.name,
+    type: row.type,
+    desire: row.desire,
+    angle: row.angle,
+    awareness: row.awareness,
+    format: row.format,
+    content: row.content,
+    notes: row.notes,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function insertFolder(payload: {
+  waveId: string;
+  parentId: string | null;
+  name: string;
+  type: string;
+  desire?: string;
+  angle?: string;
+  awareness?: string;
+  format?: string;
+  content?: string;
+  notes?: string;
+}): Promise<CboFolder> {
+  const data = await api("insertFolder", {
+    payload: {
+      wave_id: payload.waveId,
+      parent_id: payload.parentId,
+      name: payload.name,
+      type: payload.type,
+      desire: payload.desire,
+      angle: payload.angle,
+      awareness: payload.awareness,
+      format: payload.format,
+      content: payload.content,
+      notes: payload.notes,
+    },
+  });
+  return {
+    id: data.id,
+    waveId: data.wave_id,
+    parentId: data.parent_id,
+    name: data.name,
+    type: data.type,
+    desire: data.desire,
+    angle: data.angle,
+    awareness: data.awareness,
+    format: data.format,
+    content: data.content,
+    notes: data.notes,
+    createdAt: data.created_at,
+  };
+}
+
+export async function deleteFolder(folderId: string): Promise<void> {
+  await api("deleteFolder", { id: folderId });
+}
+
+
+export async function updateFolder(
+  folderId: string,
+  payload: Partial<{
+    name: string;
+    desire: string;
+    angle: string;
+    awareness: string;
+    format: string;
+    content: string;
+    notes: string;
+  }>
+): Promise<void> {
+  await api("updateFolder", { id: folderId, payload });
+}
+
+
+export async function fetchAdCopies(adId: string): Promise<CboItemCopy[]> {
+  const data = await api("fetchAdCopies", { adId });
+  return (data || []).map((row: any) => ({
+    id: row.cbo_item_copies.id,
+    folderId: row.cbo_item_copies.folder_id,
+    title: row.cbo_item_copies.title,
+    content: row.cbo_item_copies.content,
+    createdAt: row.cbo_item_copies.created_at,
+  }));
 }

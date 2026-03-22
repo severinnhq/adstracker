@@ -21,6 +21,30 @@ export async function POST(req: NextRequest) {
           .order("created_at", { ascending: true });
         break;
 
+              case "fetchFolders":
+        result = await supabase
+          .from("cbo_folders")
+          .select("*")
+          .eq("wave_id", params.waveId)
+          .order("created_at", { ascending: true });
+        break;
+
+      case "insertFolder":
+        result = await supabase
+          .from("cbo_folders")
+          .insert(params.payload)
+          .select()
+          .single();
+        break;
+
+      case "deleteFolder":
+        result = await supabase
+          .from("cbo_folders")
+          .delete()
+          .eq("id", params.id);
+        break;
+
+
       case "saveCampaign":
         result = await supabase
           .from("campaigns")
@@ -76,6 +100,65 @@ export async function POST(req: NextRequest) {
           .in("wave_id", params.waveIds)
           .order("position", { ascending: true });
         break;
+
+              case "updateFolder":
+        result = await supabase
+          .from("cbo_folders")
+          .update(params.payload)
+          .eq("id", params.id)
+          .select()
+          .single();
+        break;
+
+              case "fetchItemCopies":
+        result = await supabase
+          .from("cbo_item_copies")
+          .select("*")
+          .eq("folder_id", params.folderId)
+          .order("created_at", { ascending: true });
+        break;
+
+      case "insertItemCopy":
+        result = await supabase
+          .from("cbo_item_copies")
+          .insert(params.payload)
+          .select()
+          .single();
+        break;
+
+      case "updateItemCopy":
+        result = await supabase
+          .from("cbo_item_copies")
+          .update(params.payload)
+          .eq("id", params.id)
+          .select()
+          .single();
+        break;
+
+      case "deleteItemCopy":
+        result = await supabase
+          .from("cbo_item_copies")
+          .delete()
+          .eq("id", params.id);
+        break;
+
+              case "insertAdCopies":
+        result = await supabase
+          .from("ad_copies")
+          .insert(params.rows)
+          .select();
+        break;
+
+      case "fetchAdCopies":
+        result = await supabase
+          .from("ad_copies")
+          .select("copy_id")
+          .eq("ad_id", params.adId);
+        break;
+
+        
+
+
 
       case "rpc":
         result = await supabase.rpc(params.fn, params.args);

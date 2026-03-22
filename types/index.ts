@@ -1,3 +1,5 @@
+
+
 export type Niche = "Pet" | "Health" | "Beauty" | "Babies" | "Tech Gadgets";
 export const NICHES: Niche[] = ["Pet", "Health", "Beauty", "Babies", "Tech Gadgets"];
 
@@ -31,6 +33,8 @@ export type FormatType =
 
 export interface Ad {
   id: string;
+  campaignId: string;
+  waveId?: string | null;  // ← ADD THIS
   name: string;
   desire: string;
   angle: string;
@@ -38,11 +42,12 @@ export interface Ad {
   notes: string;
   format: FormatType;
   testFocus: TestFocus;
-  status: string;
+  status: "testing" | "winner" | "loser";
   parentId?: string;
   createdAt: string;
-  duration: number; // days
+  duration: number;
 }
+
 
 export interface Campaign {
   id: string;
@@ -73,3 +78,27 @@ export interface CboWave {
   phases: CboPhase[];
   createdAt: string;
 }
+
+export interface CboFolder {
+  id: string;
+  waveId: string;
+  parentId: string | null;
+  name: string;
+  type: "root" | "desire" | "angle" | "awareness" | "combo" | "copy" | "other";
+  desire?: string | null;
+  angle?: string | null;
+  awareness?: string | null;
+  format?: string | null;
+  content?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CboItemCopy {
+  id: string;
+  folderId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
