@@ -115,8 +115,9 @@ export async function saveCampaigns(campaigns: Campaign[]): Promise<Campaign[]> 
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
-  await api("rpc", { fn: "delete_campaign_cascade", args: { campaign_id: id } });
+  await api("deleteCampaignCascade", { campaignId: id });
 }
+
 
 // ─── Ad helpers ───
 

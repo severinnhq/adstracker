@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
           .order("created_at", { ascending: true });
         break;
 
-              case "fetchFolders":
+      case "fetchFolders":
         result = await supabase
           .from("cbo_folders")
           .select("*")
@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
           .delete()
           .eq("id", params.id);
         break;
-
 
       case "saveCampaign":
         result = await supabase
@@ -101,7 +100,7 @@ export async function POST(req: NextRequest) {
           .order("position", { ascending: true });
         break;
 
-              case "updateFolder":
+      case "updateFolder":
         result = await supabase
           .from("cbo_folders")
           .update(params.payload)
@@ -110,7 +109,7 @@ export async function POST(req: NextRequest) {
           .single();
         break;
 
-              case "fetchItemCopies":
+      case "fetchItemCopies":
         result = await supabase
           .from("cbo_item_copies")
           .select("*")
@@ -142,7 +141,7 @@ export async function POST(req: NextRequest) {
           .eq("id", params.id);
         break;
 
-              case "insertAdCopies":
+      case "insertAdCopies":
         result = await supabase
           .from("ad_copies")
           .insert(params.rows)
@@ -156,9 +155,71 @@ export async function POST(req: NextRequest) {
           .eq("ad_id", params.adId);
         break;
 
-        
+      // NEW: deleteCampaignCascade – do the cascade delete in JS instead of RPC
+      case "deleteCampaignCascade": {
+        const campaignId = params.campaignId as string;
 
+        // 1) Find all ads for this campaign
+        const { data: ads, error: adsErr } = await supabase
+          .from("ads")
+          .select("id")
+          .eq("campaign_id", campaignId);
 
+        if (adsErr) throw adsErr;
+
+        const adIds = (ads || []).map((a: any) => a.id);
+
+        // 2) Delete ad_copies linked to those ads
+        if (adIds.length > 0) {
+          const { error: delCopiesErr } = await supabase
+            .from("ad_copies")
+            .delete()
+            .in("ad_id", adIds);
+          if (delCopiesErr) throw delCopiesErr;
+        }
+
+        // 3) Delete ads
+        const { error: delAdsErr } = await supabase
+          .from("ads")
+          .delete()
+          .eq("campaign_id", campaignId);
+        if (delAdsErr) throw delAdsErr;
+
+        // 4) Find all waves for this campaign
+        const { data: waves, error: wavesErr } = await supabase
+          .from("cbo_waves")
+          .select("id")
+          .eq("campaign_id", campaignId);
+        if (wavesErr) throw wavesErr;
+
+        const waveIds = (waves || []).map((w: any) => w.id);
+
+        // 5) Delete phases for those waves
+        if (waveIds.length > 0) {
+          const { error: delPhasesErr } = await supabase
+            .from("cbo_phases")
+            .delete()
+            .in("wave_id", waveIds);
+          if (delPhasesErr) throw delPhasesErr;
+        }
+
+        // 6) Delete waves
+        const { error: delWavesErr } = await supabase
+          .from("cbo_waves")
+          .delete()
+          .eq("campaign_id", campaignId);
+        if (delWavesErr) throw delWavesErr;
+
+        // 7) Finally delete the campaign
+        const { error: delCampErr } = await supabase
+          .from("campaigns")
+          .delete()
+          .eq("id", campaignId);
+        if (delCampErr) throw delCampErr;
+
+        result = { data: null, error: null };
+        break;
+      }
 
       case "rpc":
         result = await supabase.rpc(params.fn, params.args);
