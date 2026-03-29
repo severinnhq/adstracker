@@ -101,4 +101,3 @@ export interface CboItemCopy {
   content: string;
   createdAt: string;
 }
-
