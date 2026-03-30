@@ -3,11 +3,7 @@
 export const dynamic = "force-dynamic";
 import { fetchAdCopies } from "@/lib/storage";
 
-
-
-
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   Campaign, Ad, AwarenessLevel, TestFocus, FormatType,
@@ -19,6 +15,8 @@ import {
   updatePhase, deleteWave, updateWaveStatus, fetchFolders,
 } from "@/lib/storage";
 import Link from "next/link";
+
+/* ─────────────────────── Constants ─────────────────────── */
 
 const AWARENESS_OPTIONS: AwarenessLevel[] = [
   "Unaware","Problem aware","Solution aware","Product aware","Most aware","Other",
@@ -46,6 +44,40 @@ const PHASE_COLORS: Record<string, { border: string; bg: string; text: string }>
   format: { border: "border-fuchsia-500", bg: "bg-fuchsia-500", text: "text-fuchsia-300" },
 };
 
+const GROUP_COLORS = [
+  "#ef4444", "#3b82f6", "#22c55e", "#f59e0b", "#8b5cf6",
+  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+  "#6366f1", "#a855f7", "#e11d48", "#0ea5e9", "#10b981",
+  "#eab308", "#7c3aed", "#2dd4bf", "#f472b6", "#a3e635",
+  "#fb923c", "#67e8f9", "#818cf8", "#c084fc", "#f43f5e",
+  "#38bdf8", "#34d399", "#fbbf24", "#a78bfa", "#5eead4",
+  "#f9a8d4", "#bef264", "#fdba74", "#22d3ee", "#a5b4fc",
+  "#d8b4fe", "#ff6b6b", "#4ecdc4", "#ffe66d", "#95e1d3",
+  "#f38181", "#aa96da", "#fcbad3", "#a8d8ea", "#ff9a9e",
+  "#fad0c4", "#ffecd2", "#a1c4fd", "#c2e9fb", "#d4fc79",
+];
+
+function getAdFieldValue(ad: Ad, field: string): string {
+  switch (field) {
+    case "desire": return ad.desire || "";
+    case "angle": return ad.angle || "";
+    case "awareness": return ad.awareness || "";
+    case "targetAvatar": return ad.targetAvatar || "";
+    case "format": return ad.format || "";
+    default: return "";
+  }
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+
+/* ─────────────────────── Utilities ─────────────────────── */
+
 function focusColor(f: TestFocus): string {
   switch (f) {
     case "desire": return "border-orange-500 bg-orange-500/20 text-orange-200";
@@ -54,6 +86,25 @@ function focusColor(f: TestFocus): string {
     case "advertorial": return "border-emerald-500 bg-emerald-500/20 text-emerald-200";
     case "format": return "border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-200";
     default: return "border-zinc-700 bg-zinc-800 text-zinc-300";
+  }
+}
+
+function focusDot(f: TestFocus): string {
+  switch (f) {
+    case "desire": return "bg-orange-500";
+    case "angle": return "bg-amber-500";
+    case "awareness": return "bg-yellow-500";
+    case "advertorial": return "bg-emerald-500";
+    case "format": return "bg-fuchsia-500";
+    default: return "bg-zinc-500";
+  }
+}
+
+function statusBadge(s: Ad["status"]) {
+  switch (s) {
+    case "winner": return { label: "🏆 Winner", cls: "bg-green-500/20 text-green-300 border-green-500/40" };
+    case "loser": return { label: "✖ Loser", cls: "bg-red-500/20 text-red-300 border-red-500/40" };
+    default: return { label: "⏳ Testing", cls: "bg-blue-500/15 text-blue-300 border-blue-500/30" };
   }
 }
 
@@ -70,32 +121,30 @@ function getAdProgress(ad: Ad) {
   const totalMs = ad.duration * 24 * 60 * 60 * 1000;
   const totalHoursElapsed = Math.floor(elapsedMs / (1000 * 60 * 60));
   const rawRemainingHours = Math.max(ad.duration * 24 - totalHoursElapsed, 0);
-  const daysLeft = rawRemainingHours > 48 ? 3 : rawRemainingHours > 24 ? 2 : rawRemainingHours > 0 ? 1 : 0;
   const percent = Math.min(Math.round((elapsedMs / totalMs) * 100), 100);
   const daysPassed = Math.min(ad.duration, Math.floor(totalHoursElapsed / 24));
-  return { daysPassed, totalHoursElapsed, daysLeft, hoursLeft: rawRemainingHours, percent, isComplete: rawRemainingHours === 0 };
+  return { daysPassed, totalHoursElapsed, hoursLeft: rawRemainingHours, percent, isComplete: rawRemainingHours === 0 };
 }
 
-function ProgressBar({ ad }: { ad: Ad }) {
-  const { daysPassed, totalHoursElapsed, daysLeft, hoursLeft, percent, isComplete } = getAdProgress(ad);
+/* ─────────────────────── Small components ─────────────────────── */
+
+function MiniProgress({ ad }: { ad: Ad }) {
+  const { daysPassed, hoursLeft, percent, isComplete } = getAdProgress(ad);
   const barColor = isComplete ? "bg-green-500" : percent > 66 ? "bg-yellow-500" : "bg-blue-500";
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
-        <span>Day {daysPassed}/{ad.duration} · {totalHoursElapsed}h elapsed</span>
-        <span>{isComplete ? <span className="text-green-400 font-semibold">✓ Complete</span> : <span>{daysLeft}d · {hoursLeft}h left</span>}</span>
+    <div className="w-full min-w-[100px]">
+      <div className="flex items-center justify-between text-[9px] text-zinc-500 mb-0.5">
+        <span>Day {daysPassed}/{ad.duration}</span>
+        <span>{isComplete ? <span className="text-green-400">✓</span> : `${hoursLeft}h`}</span>
       </div>
-      <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${percent}%` }} />
-      </div>
-      <div className="flex justify-between mt-1">
-        {Array.from({ length: ad.duration }, (_, i) => (
-          <div key={i} className={`w-1.5 h-1.5 rounded-full ${i < daysPassed ? barColor : "bg-zinc-700"}`} title={`Day ${i + 1}`} />
-        ))}
       </div>
     </div>
   );
 }
+
+/* ─── CBO Phase / Wave ─── */
 
 function PhaseBlock({ phase, allAds, onUpdate }: { phase: CboPhase; allAds: Ad[]; onUpdate: (phaseId: string, status: string, winnerAds: string[], notes: string) => void }) {
   const [expanded, setExpanded] = useState(phase.status === "running");
@@ -119,7 +168,7 @@ function PhaseBlock({ phase, allAds, onUpdate }: { phase: CboPhase; allAds: Ad[]
           {phase.status === "pending" && <span className="text-[10px] text-zinc-500">Pending</span>}
         </div>
         <div className="flex items-center gap-2">
-          {phase.winnerAds.length > 0 && <span className="text-[10px] text-green-400">🏆 {phase.winnerAds.length} winner{phase.winnerAds.length > 1 ? "s" : ""}</span>}
+          {phase.winnerAds.length > 0 && <span className="text-[10px] text-green-400">🏆 {phase.winnerAds.length}</span>}
           <span className="text-zinc-500 text-xs">{expanded ? "▼" : "▶"}</span>
         </div>
       </div>
@@ -134,7 +183,7 @@ function PhaseBlock({ phase, allAds, onUpdate }: { phase: CboPhase; allAds: Ad[]
             ))}
           </div>
           <div>
-            <span className="text-[11px] text-zinc-400 block mb-1">Pick winners from ads:</span>
+            <span className="text-[11px] text-zinc-400 block mb-1">Pick winners:</span>
             <div className="max-h-32 overflow-y-auto space-y-1">
               {allAds.map((ad) => (
                 <label key={ad.id} className={`flex items-center gap-2 px-2 py-1 rounded text-xs cursor-pointer ${selectedWinners.includes(ad.id) ? "bg-green-500/15 text-green-300" : "bg-zinc-800 text-zinc-400 hover:text-white"}`}>
@@ -145,25 +194,22 @@ function PhaseBlock({ phase, allAds, onUpdate }: { phase: CboPhase; allAds: Ad[]
             </div>
           </div>
           <div>
-            <span className="text-[11px] text-zinc-400 block mb-1">Or type a custom winner:</span>
+            <span className="text-[11px] text-zinc-400 block mb-1">Or type custom:</span>
             <div className="flex gap-2">
               <input value={customWinner} onChange={(e) => setCustomWinner(e.target.value)} placeholder="Ad name or ID..." className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500" onKeyDown={(e) => { if (e.key === "Enter") addCustomWinner(); }} />
               <button onClick={addCustomWinner} className="px-3 py-1 rounded-lg bg-zinc-700 text-xs text-zinc-300 hover:text-white">Add</button>
             </div>
           </div>
           {selectedWinners.length > 0 && (
-            <div>
-              <span className="text-[11px] text-zinc-400 block mb-1">Selected winners:</span>
-              <div className="flex flex-wrap gap-1">
-                {selectedWinners.map((w) => (
-                  <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-green-500/20 text-green-300 border border-green-500/30">
-                    🏆 {getAdName(w)}<button onClick={() => removeWinner(w)} className="text-green-400 hover:text-red-400 ml-0.5">✕</button>
-                  </span>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-1">
+              {selectedWinners.map((w) => (
+                <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-green-500/20 text-green-300 border border-green-500/30">
+                  🏆 {getAdName(w)}<button onClick={() => removeWinner(w)} className="text-green-400 hover:text-red-400 ml-0.5">✕</button>
+                </span>
+              ))}
             </div>
           )}
-          <textarea value={phaseNotes} onChange={(e) => setPhaseNotes(e.target.value)} placeholder="Phase notes / learnings..." rows={2} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500 resize-none" />
+          <textarea value={phaseNotes} onChange={(e) => setPhaseNotes(e.target.value)} placeholder="Phase notes…" rows={2} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500 resize-none" />
           <button onClick={() => onUpdate(phase.id, phase.status, selectedWinners, phaseNotes)} className="w-full py-1.5 rounded-lg bg-blue-600 text-xs font-medium hover:bg-blue-500">Save Phase</button>
         </div>
       )}
@@ -222,17 +268,15 @@ function WaveVaultPreview({ waveId, campaignId }: { waveId: string; campaignId: 
   }, [waveId]);
 
   const root = folders.find((f) => f.type === "root");
-  const sectionFor = (t: string) =>
-    folders.find((f) => f.type === t && f.parentId === root?.id);
-  const childrenOf = (sid: string) =>
-    folders.filter((f) => f.parentId === sid);
+  const sectionFor = (t: string) => folders.find((f) => f.type === t && f.parentId === root?.id);
+  const childrenOf = (sid: string) => folders.filter((f) => f.parentId === sid);
 
   const sections = [
-    { type: "desire",    label: "Desires",   icon: "🎯", color: "text-orange-300", border: "border-orange-500/20", bg: "bg-orange-500/5" },
-    { type: "angle",     label: "Angles",    icon: "📐", color: "text-amber-300",  border: "border-amber-500/20",  bg: "bg-amber-500/5" },
+    { type: "desire", label: "Desires", icon: "🎯", color: "text-orange-300", border: "border-orange-500/20", bg: "bg-orange-500/5" },
+    { type: "angle", label: "Angles", icon: "📐", color: "text-amber-300", border: "border-amber-500/20", bg: "bg-amber-500/5" },
     { type: "awareness", label: "Awareness", icon: "👁", color: "text-yellow-300", border: "border-yellow-500/20", bg: "bg-yellow-500/5" },
-    { type: "copy",      label: "Copies",    icon: "📝", color: "text-sky-300",    border: "border-sky-500/20",    bg: "bg-sky-500/5" },
-    { type: "combo",     label: "Combos",    icon: "🧩", color: "text-purple-300", border: "border-purple-500/20", bg: "bg-purple-500/5" },
+    { type: "copy", label: "Copies", icon: "📝", color: "text-sky-300", border: "border-sky-500/20", bg: "bg-sky-500/5" },
+    { type: "combo", label: "Combos", icon: "🧩", color: "text-purple-300", border: "border-purple-500/20", bg: "bg-purple-500/5" },
   ];
 
   const totalItems = sections.reduce((sum, s) => {
@@ -240,35 +284,22 @@ function WaveVaultPreview({ waveId, campaignId }: { waveId: string; campaignId: 
     return sum + (sec ? childrenOf(sec.id).length : 0);
   }, 0);
 
-  const handleCopy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); } catch {}
-  };
+  const handleCopy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch {} };
 
   if (!loaded || !root) return null;
-  if (totalItems === 0)
-    return (
-      <div className="border border-zinc-800 rounded-lg p-4 text-center">
-        <p className="text-[11px] text-zinc-500">
-          No vault items yet.{" "}
-          <Link href={`/campaign/${campaignId}/wave/${waveId}`} className="text-purple-400 hover:text-purple-300">
-            Open vault →
-          </Link>
-        </p>
-      </div>
-    );
+  if (totalItems === 0) return (
+    <div className="border border-zinc-800 rounded-lg p-4 text-center">
+      <p className="text-[11px] text-zinc-500">No vault items yet.{" "}
+        <Link href={`/campaign/${campaignId}/wave/${waveId}`} className="text-purple-400 hover:text-purple-300">Open vault →</Link>
+      </p>
+    </div>
+  );
 
   return (
     <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 p-4">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold text-zinc-300">
-          📂 Vault — {totalItems} item{totalItems !== 1 ? "s" : ""}
-        </span>
-        <Link
-          href={`/campaign/${campaignId}/wave/${waveId}`}
-          className="text-[11px] text-purple-400 hover:text-purple-300"
-        >
-          Open full vault →
-        </Link>
+        <span className="text-xs font-semibold text-zinc-300">📂 Vault — {totalItems} item{totalItems !== 1 ? "s" : ""}</span>
+        <Link href={`/campaign/${campaignId}/wave/${waveId}`} className="text-[11px] text-purple-400 hover:text-purple-300">Open full vault →</Link>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {sections.map((s) => {
@@ -277,39 +308,18 @@ function WaveVaultPreview({ waveId, campaignId }: { waveId: string; campaignId: 
           if (items.length === 0) return null;
           return (
             <div key={s.type} className={`border ${s.border} ${s.bg} rounded-lg p-3`}>
-              <div className={`text-[10px] font-semibold ${s.color} mb-2`}>
-                {s.icon} {s.label}
-                <span className="ml-1 text-zinc-500">({items.length})</span>
-              </div>
+              <div className={`text-[10px] font-semibold ${s.color} mb-2`}>{s.icon} {s.label}<span className="ml-1 text-zinc-500">({items.length})</span></div>
               <div className="space-y-1.5">
                 {items.slice(0, 5).map((item) => {
-                  const text =
-                    s.type === "desire"    ? item.desire || item.name :
-                    s.type === "angle"     ? item.angle || item.name :
-                    s.type === "awareness" ? item.awareness || item.name :
-                    s.type === "copy"      ? item.content?.slice(0, 80) || item.name :
-                    item.name;
+                  const text = s.type === "desire" ? item.desire || item.name : s.type === "angle" ? item.angle || item.name : s.type === "awareness" ? item.awareness || item.name : s.type === "copy" ? item.content?.slice(0, 80) || item.name : item.name;
                   return (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-1.5 text-[11px] text-zinc-300"
-                    >
+                    <div key={item.id} className="flex items-center gap-1.5 text-[11px] text-zinc-300">
                       <span className="flex-1 truncate">{text}</span>
-                      <button
-                        onClick={() => handleCopy(text || "")}
-                        className="text-[9px] text-zinc-600 hover:text-white px-1"
-                        title="Copy"
-                      >
-                        📋
-                      </button>
+                      <button onClick={() => handleCopy(text || "")} className="text-[9px] text-zinc-600 hover:text-white px-1" title="Copy">📋</button>
                     </div>
                   );
                 })}
-                {items.length > 5 && (
-                  <div className="text-[10px] text-zinc-600">
-                    +{items.length - 5} more
-                  </div>
-                )}
+                {items.length > 5 && <div className="text-[10px] text-zinc-600">+{items.length - 5} more</div>}
               </div>
             </div>
           );
@@ -319,10 +329,12 @@ function WaveVaultPreview({ waveId, campaignId }: { waveId: string; campaignId: 
   );
 }
 
-function AdCopies({ adId }: { adId: string }) {
+/* ─── Inline copy preview for table rows ─── */
+
+function AdCopiesInline({ adId }: { adId: string }) {
   const [copies, setCopies] = useState<CboItemCopy[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     fetchAdCopies(adId)
@@ -330,50 +342,379 @@ function AdCopies({ adId }: { adId: string }) {
       .catch(() => setLoaded(true));
   }, [adId]);
 
-  if (!loaded || copies.length === 0) return null;
+  if (!loaded || copies.length === 0) return <span className="text-zinc-600 text-[10px]">—</span>;
 
   return (
-    <div className="mt-3 border-t border-zinc-800 pt-3">
-      <div className="text-[10px] uppercase tracking-wider text-sky-400 font-semibold mb-2">
-        📝 Copies ({copies.length})
-      </div>
-      <div className="space-y-1.5">
-        {copies.map((copy) => {
-          const isOpen = expandedId === copy.id;
-          return (
-            <div key={copy.id} className="rounded-md border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-              <button
-                onClick={() => setExpandedId(isOpen ? null : copy.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-800/50 transition-colors"
-              >
-                <span className="text-[11px] font-medium text-sky-300 truncate flex-1">
-                  {copy.title}
-                </span>
-                {!isOpen && (
-                  <span className="text-[10px] text-zinc-500 truncate max-w-[250px]">
-                    {copy.content.slice(0, 80)}…
-                  </span>
+    <div className="space-y-1">
+      {(showAll ? copies : copies.slice(0, 1)).map((c) => (
+        <div key={c.id} className="text-[11px] text-sky-300 truncate max-w-[200px]" title={c.content}>
+          {c.title}
+        </div>
+      ))}
+      {copies.length > 1 && (
+        <button onClick={() => setShowAll(!showAll)} className="text-[10px] text-zinc-500 hover:text-sky-400">
+          {showAll ? "Show less" : `+${copies.length - 1} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─── Expanded row detail ─── */
+
+function ExpandedAdRow({ ad, colSpan }: { ad: Ad; colSpan: number }) {
+  const [copies, setCopies] = useState<CboItemCopy[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [viewCopy, setViewCopy] = useState<CboItemCopy | null>(null);
+  const [viewEditing, setViewEditing] = useState(false);
+  const [viewTitle, setViewTitle] = useState("");
+  const [viewContent, setViewContent] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchAdCopies(ad.id)
+      .then((d) => { setCopies(d); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, [ad.id]);
+
+  const openCopyModal = (c: CboItemCopy) => {
+    setViewCopy(c);
+    setViewTitle(c.title);
+    setViewContent(c.content);
+    setViewEditing(false);
+    setCopied(false);
+  };
+
+  const handleCopyText = async () => {
+    try { await navigator.clipboard.writeText(viewContent); } catch {}
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <>
+      {viewCopy && (
+        <tr><td colSpan={colSpan} className="p-0">
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewCopy(null)}>
+            <div
+              className="bg-zinc-900 border border-sky-500 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-3 border-b border-sky-500/30">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-sky-400">📝 Copy</span>
+                  {viewEditing ? (
+                    <input
+                      value={viewTitle}
+                      onChange={(e) => setViewTitle(e.target.value)}
+                      className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
+                    />
+                  ) : (
+                    <span className="text-[11px] text-zinc-400">— {viewTitle}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!viewEditing && (
+                    <button
+                      onClick={handleCopyText}
+                      className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${copied ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500"}`}
+                    >
+                      {copied ? "✓ Copied" : "📋 Copy"}
+                    </button>
+                  )}
+                  {!viewEditing && (
+                    <button
+                      onClick={() => setViewEditing(true)}
+                      className="px-3 py-1 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+                    >
+                      ✎ Edit
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setViewCopy(null)}
+                    className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 flex items-center justify-center text-sm transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {viewEditing ? (
+                  <textarea
+                    value={viewContent}
+                    onChange={(e) => setViewContent(e.target.value)}
+                    autoFocus
+                    rows={14}
+                    className="w-full bg-zinc-800 border border-sky-500/40 rounded-lg px-4 py-3 text-sm text-zinc-200 leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500/40 resize-y min-h-[250px] font-mono"
+                  />
+                ) : (
+                  <div className="rounded-lg p-4 border border-sky-500/20 bg-sky-500/10">
+                    <pre className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap font-sans">
+                      {viewContent || <span className="text-zinc-600 italic">Empty</span>}
+                    </pre>
+                  </div>
                 )}
-                <span className="text-[10px] text-zinc-600 flex-shrink-0">
-                  {isOpen ? "▲" : "▼"}
-                </span>
-              </button>
-              {isOpen && (
-                <div className="px-3 pb-3 border-t border-zinc-800">
-                  <pre className="text-[11px] text-zinc-300 whitespace-pre-wrap leading-relaxed mt-2 font-sans">
-                    {copy.content}
-                  </pre>
+              </div>
+              {viewEditing && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-sky-500/30">
+                  <div className="text-[11px] text-zinc-500">
+                    {viewTitle !== viewCopy.title || viewContent !== viewCopy.content
+                      ? <span className="text-yellow-400">● Unsaved changes</span>
+                      : <span>No changes</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setViewTitle(viewCopy.title); setViewContent(viewCopy.content); setViewEditing(false); }}
+                      className="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-400 hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { updateItemCopy } = await import("@/lib/storage");
+                          await updateItemCopy(viewCopy.id, { title: viewTitle.trim(), content: viewContent.trim() });
+                          const updated = { ...viewCopy, title: viewTitle.trim(), content: viewContent.trim() };
+                          setCopies(prev => prev.map(c => c.id === viewCopy.id ? updated : c));
+                          setViewCopy(updated);
+                          setViewEditing(false);
+                        } catch (err: any) { alert("Failed: " + (err?.message || "Unknown error")); }
+                      }}
+                      disabled={viewTitle === viewCopy.title && viewContent === viewCopy.content}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        viewTitle !== viewCopy.title || viewContent !== viewCopy.content
+                          ? "bg-blue-600 text-white hover:bg-blue-500"
+                          : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                      } disabled:opacity-50`}
+                    >
+                      Save
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-          );
-        })}
+          </div>
+        </td></tr>
+      )}
+      <tr className="bg-zinc-900/80">
+        <td colSpan={colSpan} className="px-4 py-4 border-b border-zinc-800">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-3">
+              <div className="rounded-md p-3 border border-orange-500/30 bg-orange-500/5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-orange-400 mb-1">Desire</div>
+                <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">{ad.desire}</div>
+              </div>
+              <div className="rounded-md p-3 border border-amber-500/30 bg-amber-500/5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-400 mb-1">Angle</div>
+                <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">{ad.angle}</div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {ad.targetAvatar && (
+                <div className="rounded-md p-3 border border-violet-500/30 bg-violet-500/5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-400 mb-1">Target Avatar</div>
+                  <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">{ad.targetAvatar}</div>
+                </div>
+              )}
+              {ad.notes && (
+                <div className="rounded-md p-3 border border-zinc-700 bg-zinc-800/60">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">Notes</div>
+                  <div className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">{ad.notes}</div>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 text-[10px]">
+                <span className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                  Awareness: <span className="text-yellow-300">{ad.awareness}</span>
+                </span>
+                <span className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                  Format: <span className="text-fuchsia-300">{ad.format}</span>
+                </span>
+                <span className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                  Duration: <span className="text-blue-300">{ad.duration}d</span>
+                </span>
+                <span className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                  Started: <span className="text-zinc-300">{new Date(ad.createdAt).toLocaleDateString()}</span>
+                </span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-400 mb-2">📝 Ad Copies</div>
+              {!loaded ? (
+                <div className="text-[11px] text-zinc-600">Loading…</div>
+              ) : copies.length === 0 ? (
+                <div className="text-[11px] text-zinc-600">No copies attached</div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {copies.map((c) => (
+                    <div
+                      key={c.id}
+                      className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2.5 cursor-pointer hover:border-sky-500/40 transition-colors"
+                      onClick={() => openCopyModal(c)}
+                    >
+                      <div className="text-[11px] font-medium text-sky-300 mb-1">{c.title}</div>
+                      <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap leading-relaxed font-sans line-clamp-3">{c.content}</pre>
+                      <div className="text-[9px] text-zinc-600 mt-1">Click to view full →</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+      </tr>
+    </>
+  );
+}
+
+/* ─── Editable Field Modal (Desire / Angle) ─── NEW ─── */
+
+function EditFieldModal({
+  ad,
+  field,
+  onClose,
+  onSave,
+}: {
+  ad: Ad;
+  field: "desire" | "angle" | "targetAvatar";
+  onClose: () => void;
+  onSave: (ad: Ad, field: "desire" | "angle" | "targetAvatar", value: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(field === "desire" ? ad.desire || "" : field === "angle" ? ad.angle || "" : ad.targetAvatar || "");
+  const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const original = field === "desire" ? ad.desire || "" : field === "angle" ? ad.angle || "" : ad.targetAvatar || "";
+  const hasChanges = value !== original;
+
+  const handleSave = async () => {
+    if (!hasChanges) return;
+    setSaving(true);
+    try {
+      await onSave(ad, field, value);
+      onClose();
+    } catch (err: any) {
+      alert("Failed to save: " + (err?.message || "Unknown error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+    const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // ignore
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+    const colors =
+    field === "desire"
+      ? { border: "border-orange-500", bg: "bg-orange-500/10", text: "text-orange-400", label: "🎯 Desire", ring: "focus:ring-orange-500/40" }
+      : field === "angle"
+      ? { border: "border-amber-500", bg: "bg-amber-500/10", text: "text-amber-400", label: "📐 Angle", ring: "focus:ring-amber-500/40" }
+      : { border: "border-violet-500", bg: "bg-violet-500/10", text: "text-violet-400", label: "👤 Target Avatar", ring: "focus:ring-violet-500/40" };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className={`bg-zinc-900 border ${colors.border} rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`flex items-center justify-between px-5 py-3 border-b ${colors.border}/30`}>
+          <div className="flex items-center gap-3">
+            <span className={`text-sm font-bold ${colors.text}`}>{colors.label}</span>
+            <span className="text-[11px] text-zinc-500">— {ad.name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <button
+                onClick={handleCopy}
+                className={`px-2.5 py-1 rounded-lg text-[11px] border transition-colors ${
+                  copied
+                    ? "bg-green-500/20 text-green-400 border-green-500/30"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500"
+                }`}
+              >
+                {copied ? "✓ Copied" : "📋 Copy"}
+              </button>
+            )}
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+              >
+                ✎ Edit
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 flex items-center justify-center text-sm transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {isEditing ? (
+            <textarea
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              autoFocus
+              rows={10}
+              className={`w-full bg-zinc-800 border ${colors.border}/40 rounded-lg px-4 py-3 text-sm text-zinc-200 leading-relaxed focus:outline-none focus:ring-2 ${colors.ring} resize-y min-h-[200px]`}
+            />
+          ) : (
+            <div className={`rounded-lg p-4 border ${colors.border}/20 ${colors.bg}`}>
+              <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                {value || <span className="text-zinc-600 italic">Empty</span>}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer — only visible in edit mode */}
+        {isEditing && (
+          <div className={`flex items-center justify-between px-5 py-3 border-t ${colors.border}/30`}>
+            <div className="text-[11px] text-zinc-500">
+              {hasChanges ? (
+                <span className="text-yellow-400">● Unsaved changes</span>
+              ) : (
+                <span>No changes</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setValue(original); setIsEditing(false); }}
+                className="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!hasChanges || saving}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  hasChanges ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                } disabled:opacity-50`}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-
+/* ═══════════════════════════════════════════════════════════
+   MAIN PAGE
+   ═══════════════════════════════════════════════════════════ */
 
 export default function CampaignPage() {
   const params = useParams();
@@ -398,6 +739,7 @@ export default function CampaignPage() {
   const [desire, setDesire] = useState("");
   const [angle, setAngle] = useState("");
   const [awareness, setAwareness] = useState<AwarenessLevel>("Problem aware");
+  const [targetAvatar, setTargetAvatar] = useState("");
   const [notes, setNotes] = useState("");
   const [format, setFormat] = useState<FormatType>("UGC");
   const [formTestFocus, setFormTestFocus] = useState<TestFocus>("desire");
@@ -412,6 +754,30 @@ export default function CampaignPage() {
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmVariantDeleteId, setConfirmVariantDeleteId] = useState<string | null>(null);
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [colorBy, setColorBy] = useState<Set<string>>(new Set());
+  const toggleColorBy = (field: string) => {
+    setColorBy(prev => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  };
+
+  /* ─── NEW: Field edit modal state ─── */
+  const [fieldEditAd, setFieldEditAd] = useState<Ad | null>(null);
+    const [fieldEditField, setFieldEditField] = useState<"desire" | "angle" | "targetAvatar">("desire");
+
+  const openFieldEdit = (ad: Ad, field: "desire" | "angle" | "targetAvatar") => {
+    setFieldEditAd(ad);
+    setFieldEditField(field);
+  };
+  const handleFieldSave = async (ad: Ad, field: "desire" | "angle" | "targetAvatar", value: string) => {
+    const updated = { ...ad, [field]: value };
+    await updateAd(updated);
+    await reload();
+  };
 
   const reload = async () => {
     if (!id) return;
@@ -436,36 +802,50 @@ export default function CampaignPage() {
     load();
   }, [id]);
 
+  const colorMaps = useMemo(() => {
+    const ads = campaign?.ads || [];
+    const maps: Record<string, Record<string, string>> = {};
+    const fields = ["desire", "angle", "awareness", "targetAvatar", "format"];
+    for (const field of fields) {
+      if (!colorBy.has(field)) continue;
+      const uniqueValues = [...new Set(ads.map(a => getAdFieldValue(a, field)).filter(Boolean))];
+      const map: Record<string, string> = {};
+      uniqueValues.forEach((val, i) => { map[val] = GROUP_COLORS[i % GROUP_COLORS.length]; });
+      maps[field] = map;
+    }
+    return maps;
+  }, [colorBy, campaign?.ads]);
+
   if (loading) return <div className="min-h-screen bg-zinc-950 text-zinc-400 flex items-center justify-center">Loading…</div>;
   if (error) return <div className="min-h-screen bg-zinc-950 text-red-400 flex items-center justify-center"><div className="text-center"><p className="mb-2">Error: {error}</p><Link href="/" className="text-blue-400 hover:underline">← Back</Link></div></div>;
   if (!campaign || !id) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center"><div className="text-center"><p className="text-zinc-400 mb-4">Campaign not found</p><Link href="/" className="text-blue-400 hover:underline">← Back</Link></div></div>;
 
-  const openNewForm = () => { setEditingAd(null); setVariantParentId(null); setName(""); setDesire(""); setAngle(""); setAwareness("Problem aware"); setNotes(""); setFormat("UGC"); setFormTestFocus("desire"); setDuration(7); setStartDate(new Date().toISOString()); setShowForm(true); };
-  const openVariantForm = (parent: Ad) => { setEditingAd(null); setVariantParentId(parent.id); setName((parent.name || "") + " / Variant"); setDesire(parent.desire || ""); setAngle(parent.angle || ""); setAwareness(parent.awareness || "Problem aware"); setNotes(""); setFormat(parent.format || "UGC"); setFormTestFocus(parent.testFocus || "desire"); setDuration(parent.duration || 7); setStartDate(new Date().toISOString()); setShowForm(true); };
-  const openEditForm = (ad: Ad) => { setEditingAd(ad); setVariantParentId(ad.parentId || null); setName(ad.name || ""); setDesire(ad.desire || ""); setAngle(ad.angle || ""); setAwareness(ad.awareness || "Problem aware"); setNotes(ad.notes || ""); setFormat(ad.format || "UGC"); setFormTestFocus(ad.testFocus || "desire"); setDuration(ad.duration || 7); setStartDate(ad.createdAt); setShowForm(true); };
+  const openNewForm = () => { setEditingAd(null); setVariantParentId(null); setName(""); setDesire(""); setAngle(""); setAwareness("Problem aware"); setTargetAvatar(""); setNotes(""); setFormat("UGC"); setFormTestFocus("desire"); setDuration(7); setStartDate(new Date().toISOString()); setShowForm(true); };
+  const openVariantForm = (parent: Ad) => { setEditingAd(null); setVariantParentId(parent.id); setName((parent.name || "") + " / Variant"); setDesire(parent.desire || ""); setAngle(parent.angle || ""); setAwareness(parent.awareness || "Problem aware"); setTargetAvatar(parent.targetAvatar || ""); setNotes(""); setFormat(parent.format || "UGC"); setFormTestFocus(parent.testFocus || "desire"); setDuration(parent.duration || 7); setStartDate(new Date().toISOString()); setShowForm(true); };
+  const openEditForm = (ad: Ad) => { setEditingAd(ad); setVariantParentId(ad.parentId || null); setName(ad.name || ""); setDesire(ad.desire || ""); setAngle(ad.angle || ""); setAwareness(ad.awareness || "Problem aware"); setTargetAvatar(ad.targetAvatar || ""); setNotes(ad.notes || ""); setFormat(ad.format || "UGC"); setFormTestFocus(ad.testFocus || "desire"); setDuration(ad.duration || 7); setStartDate(ad.createdAt); setShowForm(true); };
 
-const handleSaveAd = async () => {
-  const nt = name.trim(), dt = desire.trim(), at = angle.trim();
-  if (!nt || !dt || !at) return;
-  try {
-    if (editingAd) {
-      await updateAd({ ...editingAd, name: nt, desire: dt, angle: at, awareness, notes, format, testFocus: formTestFocus, duration, createdAt: startDate });
-    } else {
-      await insertAd(campaign.id, {
-        name: nt, desire: dt, angle: at, awareness, notes, format,
-        testFocus: formTestFocus, status: "testing",
-        parentId: variantParentId || undefined,
-        createdAt: startDate, duration,
-        waveId: activeWaveId,  // ← THIS LINE ties the ad to the selected wave
-      });
-    }
-    await reload(); setShowForm(false); setEditingAd(null); setVariantParentId(null);
-  } catch (err: any) { alert("Failed to save ad: " + (err?.message || "Unknown error")); }
-};
+  const handleSaveAd = async () => {
+    const nt = name.trim(), dt = desire.trim(), at = angle.trim();
+    if (!nt || !dt || !at) return;
+    try {
+      if (editingAd) {
+        await updateAd({ ...editingAd, name: nt, desire: dt, angle: at, awareness, targetAvatar, notes, format, testFocus: formTestFocus, duration, createdAt: startDate });
+      } else {
+        await insertAd(campaign.id, {
+          name: nt, desire: dt, angle: at, awareness, targetAvatar, notes, format,
+          testFocus: formTestFocus, status: "testing",
+          parentId: variantParentId || undefined,
+          createdAt: startDate, duration,
+          waveId: activeWaveId,
+        });
+      }
+      await reload(); setShowForm(false); setEditingAd(null); setVariantParentId(null);
+    } catch (err: any) { alert("Failed to save ad: " + (err?.message || "Unknown error")); }
+  };
 
   const handleSetStatus = async (adId: string, status: Ad["status"]) => { try { await setAdStatus(adId, status); await reload(); } catch {} };
   const actuallyDelete = async (parentId: string) => { try { await deleteAdWithVariants(parentId); await reload(); } catch {} setConfirmDeleteId(null); };
-  const deleteVariantOnly = async (id: string) => { try { await deleteSingleAd(id); await reload(); } catch {} setConfirmVariantDeleteId(null); };
+  const deleteVariantOnly = async (vid: string) => { try { await deleteSingleAd(vid); await reload(); } catch {} setConfirmVariantDeleteId(null); };
 
   const handleCreateWave = async () => { const t = newWaveName.trim(); if (!t) return; try { await createWave(campaign.id, t); setNewWaveName(""); setShowNewWave(false); await reload(); } catch (err: any) { alert("Failed: " + (err?.message || "Unknown error")); } };
   const handleUpdatePhase = async (phaseId: string, status: string, winnerAds: string[], phaseNotes: string) => { try { await updatePhase(phaseId, status, winnerAds, phaseNotes); await reload(); } catch (err: any) { alert("Failed: " + (err?.message || "Unknown error")); } };
@@ -476,36 +856,66 @@ const handleSaveAd = async () => {
   const confirmDeleteWave = async () => { if (!pendingDeleteWaveId || deleteConfirmText !== "DELETE") return; await handleDeleteWave(pendingDeleteWaveId); setPendingDeleteWaveId(null); setDeleteConfirmText(""); };
 
   const allAds: Ad[] = campaign.ads || [];
-// NEW — only show ads that belong to the active wave (or have no wave)
-const filteredAds = allAds.filter((ad) => {
-  // ✅ Wave scoping: if a wave is selected, only show that wave's ads
-  if (activeWaveId && ad.waveId && ad.waveId !== activeWaveId) return false;
-  // If no wave selected, show ads that have no wave assigned
-  if (!activeWaveId && ad.waveId) return false;
-
-  if (showOnlyWinners && ad.status !== "winner") return false;
-  if (filterDesire && !(ad.desire || "").toLowerCase().includes(filterDesire.toLowerCase())) return false;
-  if (filterAngle && !(ad.angle || "").toLowerCase().includes(filterAngle.toLowerCase())) return false;
-  if (filterAwareness !== "All" && ad.awareness !== filterAwareness) return false;
-  if (globalFocus !== "all" && ad.testFocus !== globalFocus) return false;
-  return true;
-});
+  const filteredAds = allAds.filter((ad) => {
+    if (activeWaveId && ad.waveId && ad.waveId !== activeWaveId) return false;
+    if (!activeWaveId && ad.waveId) return false;
+    if (showOnlyWinners && ad.status !== "winner") return false;
+    if (filterDesire && !(ad.desire || "").toLowerCase().includes(filterDesire.toLowerCase())) return false;
+    if (filterAngle && !(ad.angle || "").toLowerCase().includes(filterAngle.toLowerCase())) return false;
+    if (filterAwareness !== "All" && ad.awareness !== filterAwareness) return false;
+    if (globalFocus !== "all" && ad.testFocus !== globalFocus) return false;
+    return true;
+  });
 
   const mainAds = filteredAds.filter((a) => !a.parentId);
   const variantsFor = (parentId: string) => filteredAds.filter((a) => a.parentId === parentId);
-  const isGlobalFocus = (key: TestFocus) => globalFocus === key;
+
+  const COLOR_FIELDS = ["desire", "angle", "awareness", "targetAvatar", "format"];
+
+  const getRowBars = (ad: Ad) =>
+    COLOR_FIELDS
+      .filter(f => colorBy.has(f))
+      .map(f => ({
+        field: f,
+        color: colorMaps[f]?.[getAdFieldValue(ad, f)] || "#3f3f46",
+        value: getAdFieldValue(ad, f),
+      }));
+
+  const getRowBg = (ad: Ad): string | undefined => {
+    if (colorBy.size !== 1) return undefined;
+    const field = [...colorBy][0];
+    const color = colorMaps[field]?.[getAdFieldValue(ad, field)];
+    return color ? hexToRgba(color, 0.08) : undefined;
+  };
+
+  const fieldColor = (ad: Ad, field: string): string | undefined => {
+    if (!colorBy.has(field)) return undefined;
+    return colorMaps[field]?.[getAdFieldValue(ad, field)];
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
-      {/* Ad Form Modal */}
+
+      {/* ═══ Field Edit Modal (Desire / Angle) ═══ NEW */}
+      {fieldEditAd && (
+        <EditFieldModal
+          ad={fieldEditAd}
+          field={fieldEditField}
+          onClose={() => setFieldEditAd(null)}
+          onSave={handleFieldSave}
+        />
+      )}
+
+      {/* ═══ Ad Form Modal ═══ */}
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="font-bold mb-4">{editingAd ? "Edit Ad" : variantParentId ? "New Variant" : "New Ad"}</h2>
             <div className="space-y-3 mb-4">
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ad name / label" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-              <input value={desire} onChange={(e) => setDesire(e.target.value)} placeholder="Desire" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-              <input value={angle} onChange={(e) => setAngle(e.target.value)} placeholder="Angle" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+              <textarea value={desire} onChange={(e) => setDesire(e.target.value)} placeholder="Desire (mass desire — can be long form)" rows={3} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none" />
+              <textarea value={angle} onChange={(e) => setAngle(e.target.value)} placeholder="Angle (can be long form)" rows={3} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none" />
+              <input value={targetAvatar} onChange={(e) => setTargetAvatar(e.target.value)} placeholder="Target avatar (e.g. 35-45 busy moms, dog owners 25-40)" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500" />
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-zinc-400">Start:</span>
                 <input type="datetime-local" value={toLocalInputValue(startDate)} onChange={(e) => { const iso = new Date(e.target.value).toISOString(); setStartDate(iso); if (editingAd) setEditingAd({ ...editingAd, createdAt: iso }); }} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-blue-500" />
@@ -532,7 +942,7 @@ const filteredAds = allAds.filter((ad) => {
         </div>
       )}
 
-      {/* New Wave Modal */}
+      {/* ═══ New Wave Modal ═══ */}
       {showNewWave && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-full max-w-sm">
@@ -547,7 +957,7 @@ const filteredAds = allAds.filter((ad) => {
         </div>
       )}
 
-      {/* 2FA Delete Wave Modal */}
+      {/* ═══ Delete Wave Modal ═══ */}
       {pendingDeleteWaveId && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-red-700 rounded-xl p-5 w-full max-w-sm">
@@ -562,8 +972,9 @@ const filteredAds = allAds.filter((ad) => {
         </div>
       )}
 
+            {/* ═══ Header ═══ */}
       <header className="border-b border-zinc-800 sticky top-0 bg-zinc-950/90 backdrop-blur-md z-40">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
           <div><Link href="/" className="text-sm text-zinc-500 hover:text-white">← Back</Link><h1 className="text-xl font-bold mt-1">{campaign.name}</h1></div>
           <div className="flex gap-2">
             <button onClick={() => setShowNewWave(true)} className="px-4 py-2 rounded-lg bg-purple-600 text-sm font-medium hover:bg-purple-500">+ CBO Wave</button>
@@ -572,86 +983,46 @@ const filteredAds = allAds.filter((ad) => {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-6 space-y-4">
-        {/* CBO Waves */}
-        {/* CBO Waves */}
-{/* CBO Waves + Inline Vault */}
-{waves.length > 0 && (
-  <div className="mb-4">
-    <div className="flex items-center justify-between mb-2">
-      <h2 className="text-sm font-bold text-purple-300">🧪 CBO Testing Waves</h2>
-      <div className="text-[11px] text-zinc-500">
-        {waves.length} wave{waves.length > 1 ? "s" : ""}
-      </div>
-    </div>
+      <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-4">
 
-    {/* Wave tabs */}
-    <div className="flex border-b border-zinc-800 mb-3 overflow-x-auto">
-      {waves.map((wave) => {
-        const isActive = wave.id === activeWaveId;
-        const doneCount = wave.phases.filter((p) => p.status === "done").length;
-        return (
-          <div key={wave.id} className="flex items-center">
-            <button
-              onClick={() => setActiveWaveId(isActive ? null : wave.id)}
-              className={`px-4 py-2 text-xs whitespace-nowrap border-b-2 transition-colors flex items-center gap-2 ${
-                isActive
-                  ? "border-purple-500 text-purple-300 bg-zinc-900"
-                  : "border-transparent text-zinc-500 hover:text-zinc-200"
-              }`}
-            >
-              {wave.name}
-              {wave.status === "completed" && <span className="text-green-400">✓</span>}
-              <span className="text-[9px] text-zinc-600">
-                {doneCount}/{wave.phases.length}
-              </span>
-            </button>
-            <Link
-              href={`/campaign/${id}/wave/${wave.id}`}
-              className="px-1.5 py-2 text-[11px] text-zinc-500 hover:text-purple-300"
-              title="Open vault"
-            >
-              📂
-            </Link>
-            <button
-              onClick={() => requestDeleteWave(wave.id)}
-              className="px-1.5 py-2 text-[11px] text-zinc-600 hover:text-red-400"
-              title="Delete wave"
-            >
-              🗑
-            </button>
+        {/* ═══ CBO Waves ═══ */}
+        {waves.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-bold text-purple-300">🧪 CBO Testing Waves</h2>
+              <div className="text-[11px] text-zinc-500">{waves.length} wave{waves.length > 1 ? "s" : ""}</div>
+            </div>
+            <div className="flex border-b border-zinc-800 mb-3 overflow-x-auto">
+              {waves.map((wave) => {
+                const isActive = wave.id === activeWaveId;
+                const doneCount = wave.phases.filter((p) => p.status === "done").length;
+                return (
+                  <div key={wave.id} className="flex items-center">
+                    <button onClick={() => setActiveWaveId(isActive ? null : wave.id)}
+                      className={`px-4 py-2 text-xs whitespace-nowrap border-b-2 transition-colors flex items-center gap-2 ${isActive ? "border-purple-500 text-purple-300 bg-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-200"}`}>
+                      {wave.name}{wave.status === "completed" && <span className="text-green-400">✓</span>}
+                      <span className="text-[9px] text-zinc-600">{doneCount}/{wave.phases.length}</span>
+                    </button>
+                    <Link href={`/campaign/${id}/wave/${wave.id}`} className="px-1.5 py-2 text-[11px] text-zinc-500 hover:text-purple-300" title="Open vault">📂</Link>
+                    <button onClick={() => requestDeleteWave(wave.id)} className="px-1.5 py-2 text-[11px] text-zinc-600 hover:text-red-400" title="Delete wave">🗑</button>
+                  </div>
+                );
+              })}
+            </div>
+            {activeWaveId && (() => {
+              const activeWave = waves.find((w) => w.id === activeWaveId);
+              if (!activeWave) return null;
+              return (
+                <div className="space-y-3">
+                  <WaveCard wave={activeWave} allAds={allAds} onUpdatePhase={handleUpdatePhase} onDeleteWave={(wid) => requestDeleteWave(wid)} onCompleteWave={handleCompleteWave} />
+                  <WaveVaultPreview waveId={activeWave.id} campaignId={id} />
+                </div>
+              );
+            })()}
           </div>
-        );
-      })}
-    </div>
+        )}
 
-    {/* ONLY the selected wave's content renders here */}
-    {activeWaveId &&
-      (() => {
-        const activeWave = waves.find((w) => w.id === activeWaveId);
-        if (!activeWave) return null;
-        return (
-          <div className="space-y-3">
-            <WaveCard
-              wave={activeWave}
-              allAds={allAds}
-              onUpdatePhase={handleUpdatePhase}
-              onDeleteWave={(wid) => requestDeleteWave(wid)}
-              onCompleteWave={handleCompleteWave}
-            />
-            {/* ↓ This vault preview ONLY shows items from this wave ↓ */}
-            <WaveVaultPreview waveId={activeWave.id} campaignId={id} />
-          </div>
-        );
-      })()}
-  </div>
-)}
-
-{/* ---- Filters start AFTER the wave section ---- */}
-
-
-
-        {/* Filters */}
+        {/* ═══ Filters ═══ */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex flex-wrap gap-3 items-center text-xs">
           <input value={filterDesire} onChange={(e) => setFilterDesire(e.target.value)} placeholder="Filter by desire" className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 flex-1 min-w-[140px]" />
           <input value={filterAngle} onChange={(e) => setFilterAngle(e.target.value)} placeholder="Filter by angle" className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 flex-1 min-w-[140px]" />
@@ -659,93 +1030,228 @@ const filteredAds = allAds.filter((ad) => {
           <label className="flex items-center gap-1 text-zinc-400"><input type="checkbox" checked={showOnlyWinners} onChange={(e) => setShowOnlyWinners(e.target.checked)} className="accent-blue-500" />Winners only</label>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[11px] text-zinc-500 mr-1">Show test focus:</span>
+          <span className="text-[11px] text-zinc-500 mr-1">Test focus:</span>
           <button onClick={() => setGlobalFocus("all")} className={`px-3 py-1 rounded-full border text-[11px] transition-colors ${globalFocus === "all" ? "border-white bg-white/10 text-white" : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white"}`}>All</button>
           {TEST_FOCUS_OPTIONS.map((opt) => <button key={opt.id} onClick={() => setGlobalFocus(globalFocus === opt.id ? "all" : opt.id)} className={`px-3 py-1 rounded-full border text-[11px] transition-colors ${globalFocus === opt.id ? `${opt.color} text-white` : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white"}`}>{opt.label}</button>)}
         </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[11px] text-zinc-500 mr-1">Color by:</span>
+          {[
+            { id: "desire", label: "Desire", active: "border-orange-500 bg-orange-500/15 text-orange-300" },
+            { id: "angle", label: "Angle", active: "border-amber-500 bg-amber-500/15 text-amber-300" },
+            { id: "awareness", label: "Awareness", active: "border-yellow-500 bg-yellow-500/15 text-yellow-300" },
+            { id: "targetAvatar", label: "Avatar", active: "border-violet-500 bg-violet-500/15 text-violet-300" },
+            { id: "format", label: "Format", active: "border-fuchsia-500 bg-fuchsia-500/15 text-fuchsia-300" },
+          ].map((opt) => (
+            <button key={opt.id} onClick={() => toggleColorBy(opt.id)}
+              className={`px-3 py-1 rounded-full border text-[11px] transition-colors ${colorBy.has(opt.id) ? opt.active : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white"}`}>
+              {opt.label}
+            </button>
+          ))}
+          {colorBy.size > 0 && (
+            <button onClick={() => setColorBy(new Set())} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white">✕ Clear</button>
+          )}
+        </div>
 
-        {/* Ad Cards */}
+        {/* ═══ ADS TABLE ═══ */}
         {mainAds.length === 0 ? (
           <div className="text-center text-zinc-500 text-sm py-10">No ads match the current filters.</div>
         ) : (
-          <div className="space-y-4">
-            {mainAds.map((ad) => {
-              const variants = variantsFor(ad.id);
-              const statusClass = ad.status === "winner" ? "border-green-500/40 bg-green-500/5" : ad.status === "loser" ? "border-red-500/40 bg-red-500/5" : "border-blue-500/30 bg-blue-500/5";
-              const barClass = ad.status === "winner" ? "bg-green-500" : ad.status === "loser" ? "bg-red-500" : "bg-blue-500";
-              return (
-                <div key={ad.id} className={`relative border rounded-lg px-4 py-3 ${statusClass}`}>
-                  <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-lg ${barClass}`} />
-                  <div className="pl-3">
-                    <div className="flex flex-col md:flex-row md:items-start md:gap-4">
-                      <div className="flex-1 min-w-0 space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {ad.status === "winner" && <span className="text-green-400 text-xs">🏆 Winner</span>}
-                            {ad.status === "loser" && <span className="text-red-400 text-xs">✖ Loser</span>}
-                            <span className="font-semibold text-sm break-words">{ad.name}</span>
-                          </div>
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${focusColor(ad.testFocus)}`}>⚡ {ad.testFocus}</span>
-                        </div>
-                        <ProgressBar ad={ad} />
-                        <div className={`rounded-md p-3 border ${isGlobalFocus("desire") ? "border-orange-500 bg-orange-500/10" : "border-zinc-800 bg-zinc-900/80"}`}>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-300 mb-1">Desire</div>
-                          <div className="text-xs text-zinc-100 break-words">{ad.desire}</div>
-                        </div>
-                        <div className={`rounded-md p-3 border ${isGlobalFocus("angle") ? "border-amber-500 bg-amber-500/10" : "border-zinc-800 bg-zinc-900/80"}`}>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-300 mb-1">Angle</div>
-                          <div className="text-xs text-zinc-100 break-words">{ad.angle}</div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className={`px-2.5 py-1 rounded-md text-[11px] border ${isGlobalFocus("awareness") ? "border-yellow-500 bg-yellow-500/10 text-yellow-100" : "border-zinc-600 bg-zinc-800 text-zinc-200"}`}><span className="font-semibold">Awareness:</span> {ad.awareness}</div>
-                          <div className={`px-2.5 py-1 rounded-md text-[11px] border ${isGlobalFocus("format") ? "border-fuchsia-500 bg-fuchsia-500/10 text-fuchsia-100" : "border-zinc-600 bg-zinc-800 text-zinc-200"}`}><span className="font-semibold">Format:</span> {ad.format}</div>
-                        </div>
-                        {ad.notes && <div className="rounded-md bg-zinc-900/60 p-2 border border-dashed border-zinc-800"><div className="text-[11px] uppercase text-zinc-500 mb-1">Notes</div><div className="text-[11px] text-zinc-300 break-words">{ad.notes}</div></div>}
-                      </div>
-                      <AdCopies adId={ad.id} />
+          <div className="border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                                  <tr className="bg-zinc-900 border-b border-zinc-800">
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium w-8"></th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Name</th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Desire</th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Angle</th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Avatar</th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Awareness</th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Format</th>
+                    <th className="text-left px-3 py-2.5 text-zinc-500 font-medium min-w-[120px]">Progress</th>
+                    <th className="text-right px-3 py-2.5 text-zinc-500 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mainAds.map((ad) => {
+                    const variants = variantsFor(ad.id);
+                    const badge = statusBadge(ad.status);
+                    const isExpanded = expandedRowId === ad.id;
 
-                      <div className="mt-3 md:mt-0 flex items-center md:flex-col md:items-end gap-2 flex-shrink-0">
-                        <div className="flex gap-1">
-                          {(["winner","loser","testing"] as Ad["status"][]).map((s) => <button key={s} onClick={() => handleSetStatus(ad.id, s)} className={`px-2 py-1 rounded text-[11px] ${ad.status === s ? (s === "winner" ? "bg-green-500/20 text-green-400" : s === "loser" ? "bg-red-500/30 text-red-300" : "bg-blue-500/20 text-blue-400") : "bg-zinc-800 text-zinc-500 hover:text-white"}`}>{s === "winner" ? "W" : s === "loser" ? "L" : "T"}</button>)}
-                        </div>
-                        <div className="flex gap-1">
-                          <button onClick={() => openVariantForm(ad)} className="px-2 py-1 rounded text-[11px] bg-zinc-800 text-zinc-300 hover:text-white">+ Var</button>
-                          <button onClick={() => openEditForm(ad)} className="px-2 py-1 rounded text-[11px] bg-zinc-800 text-zinc-300 hover:text-white">✎</button>
-                          <button onClick={() => confirmDeleteId === ad.id ? actuallyDelete(ad.id) : setConfirmDeleteId(ad.id)} className={`px-2 py-1 rounded text-[11px] ${confirmDeleteId === ad.id ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-500 hover:text-red-400"}`}>{confirmDeleteId === ad.id ? "OK?" : "Del"}</button>
-                        </div>
-                      </div>
-                    </div>
-                    {variants.length > 0 && (
-                      <div className="mt-3 space-y-2 pl-6 md:pl-10">
-                        {variants.map((v) => (
-                          <div key={v.id} className="flex flex-col md:flex-row md:items-start md:gap-3 text-xs bg-zinc-900/60 border border-zinc-800 rounded-md px-3 py-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300">Variant</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${focusColor(v.testFocus)}`}>⚡ {v.testFocus}</span>
-                                <span className="px-2 py-0.5 rounded-full text-[10px] border border-sky-500/60 bg-sky-500/10 text-sky-100">{v.format}</span>
-                                {v.status === "winner" && <span className="text-green-400 text-[11px]">🏆</span>}
-                                {v.status === "loser" && <span className="text-red-400 text-[11px]">✖</span>}
-                                <span className="font-medium break-words">{v.name}</span>
+                    return (
+                      <Fragment key={ad.id}>
+                        <tr
+                          className={`border-b border-zinc-800/60 hover:bg-zinc-900/60 transition-colors cursor-pointer ${isExpanded ? "bg-zinc-900/80" : ""}`}
+                          style={getRowBg(ad) ? { backgroundColor: getRowBg(ad) } : undefined}
+                          onClick={() => setExpandedRowId(isExpanded ? null : ad.id)}
+                        >
+                          <td className="pl-1 pr-2 py-2.5">
+                            <div className="flex items-center gap-0.5">
+                              {getRowBars(ad).map((bar, i) => (
+                                <div key={i} className="w-1 h-6 rounded-sm flex-shrink-0" style={{ backgroundColor: bar.color }} title={`${bar.field}: ${bar.value}`} />
+                              ))}
+                              <span className={`w-2 h-2 rounded-full ${focusDot(ad.testFocus)} ml-1`} title={ad.testFocus} />
+                              <span className="text-zinc-600 text-[10px]">{isExpanded ? "▼" : "▶"}</span>
+                            </div>
+                          </td>
+                                                   <td className="px-3 py-2.5">
+                            <div className="font-medium text-zinc-100">{ad.name}</div>
+                            <div className={`text-[10px] mt-0.5 px-1.5 py-0.5 rounded inline-block border ${focusColor(ad.testFocus)}`}>⚡ {ad.testFocus}</div>
+                          </td>
+                          {/* ── CLICKABLE DESIRE ── */}
+                          <td className="px-3 py-2.5">
+                            <div
+                              className="text-zinc-300 max-w-[180px] truncate cursor-pointer hover:text-orange-300 transition-colors"
+                              style={fieldColor(ad, "desire") ? { color: fieldColor(ad, "desire") } : undefined}
+                              title="Click to view/edit desire"
+                              onClick={(e) => { e.stopPropagation(); openFieldEdit(ad, "desire"); }}
+                            >
+                              {ad.desire}
+                            </div>
+                          </td>
+                          {/* ── CLICKABLE ANGLE ── */}
+                          <td className="px-3 py-2.5">
+                            <div
+                              className="text-zinc-300 max-w-[180px] truncate cursor-pointer hover:text-amber-300 transition-colors"
+                              style={fieldColor(ad, "angle") ? { color: fieldColor(ad, "angle") } : undefined}
+                              title="Click to view/edit angle"
+                              onClick={(e) => { e.stopPropagation(); openFieldEdit(ad, "angle"); }}
+                            >
+                              {ad.angle}
+                            </div>
+                          </td>
+                                                    <td className="px-3 py-2.5">
+                            {ad.targetAvatar ? (
+                              <div
+                                className="flex items-center gap-1.5 max-w-[140px] cursor-pointer hover:text-violet-300 transition-colors"
+                                title="Click to view/edit avatar"
+                                onClick={(e) => { e.stopPropagation(); openFieldEdit(ad, "targetAvatar"); }}
+                              >
+                                <span className="w-5 h-5 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center text-[9px] text-violet-300 flex-shrink-0">👤</span>
+                                <span className="text-zinc-300 truncate text-[11px]" style={fieldColor(ad, "targetAvatar") ? { color: fieldColor(ad, "targetAvatar") } : undefined}>{ad.targetAvatar}</span>
                               </div>
-                              <div className="my-2"><ProgressBar ad={v} /></div>
-                              {v.notes && <div className="text-[11px] text-zinc-300 break-words">{v.notes}</div>}
+                            ) : (
+                              <span
+                                className="text-zinc-600 text-[10px] cursor-pointer hover:text-violet-400 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); openFieldEdit(ad, "targetAvatar"); }}
+                              >+ avatar</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="text-[11px] text-yellow-300/80" style={fieldColor(ad, "awareness") ? { color: fieldColor(ad, "awareness") } : undefined}>{ad.awareness}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="px-2 py-0.5 rounded text-[10px] border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200" style={fieldColor(ad, "format") ? { color: fieldColor(ad, "format"), borderColor: fieldColor(ad, "format") } : undefined}>{ad.format}</span>
+                          </td>
+                          <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                            <MiniProgress ad={ad} />
+                          </td>
+                                                <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1">
+                              {(["winner","loser","testing"] as Ad["status"][]).map((s) => (
+                                <button key={s} onClick={() => handleSetStatus(ad.id, s)}
+                                  className={`w-6 h-6 rounded text-[10px] ${ad.status === s ? (s === "winner" ? "bg-green-500/30 text-green-300" : s === "loser" ? "bg-red-500/30 text-red-300" : "bg-blue-500/20 text-blue-300") : "bg-zinc-800 text-zinc-600 hover:text-white"}`}
+                                  title={s}>{s === "winner" ? "W" : s === "loser" ? "L" : "T"}</button>
+                              ))}
+                              <button onClick={() => openVariantForm(ad)} className="w-6 h-6 rounded text-[10px] bg-zinc-800 text-zinc-400 hover:text-white" title="Add variant">+V</button>
+                              <button onClick={() => openEditForm(ad)} className="w-6 h-6 rounded text-[10px] bg-zinc-800 text-zinc-400 hover:text-white" title="Edit">✎</button>
+                              <button onClick={() => confirmDeleteId === ad.id ? actuallyDelete(ad.id) : setConfirmDeleteId(ad.id)}
+                                className={`w-6 h-6 rounded text-[10px] ${confirmDeleteId === ad.id ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-600 hover:text-red-400"}`}
+                                title="Delete">{confirmDeleteId === ad.id ? "?" : "✕"}</button>
                             </div>
-                            <AdCopies adId={v.id} />
+                          </td>
+                        </tr>
 
-                            <div className="mt-1 md:mt-0 flex items-center gap-1 flex-shrink-0">
-                              {(["winner","loser","testing"] as Ad["status"][]).map((s) => <button key={s} onClick={() => handleSetStatus(v.id, s)} className={`px-2 py-1 rounded text-[11px] ${v.status === s ? (s === "winner" ? "bg-green-500/20 text-green-400" : s === "loser" ? "bg-red-500/30 text-red-300" : "bg-blue-500/20 text-blue-400") : "bg-zinc-800 text-zinc-500 hover:text-white"}`}>{s === "winner" ? "W" : s === "loser" ? "L" : "T"}</button>)}
-                              <button onClick={() => openEditForm(v)} className="px-2 py-1 rounded text-[11px] bg-zinc-800 text-zinc-500 hover:text-white">✎</button>
-                              <button onClick={() => confirmVariantDeleteId === v.id ? deleteVariantOnly(v.id) : setConfirmVariantDeleteId(v.id)} className={`px-2 py-1 rounded text-[11px] ${confirmVariantDeleteId === v.id ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-500 hover:text-red-400"}`}>{confirmVariantDeleteId === v.id ? "OK?" : "✕"}</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                                                {isExpanded && <ExpandedAdRow ad={ad} colSpan={9} />}
+
+                        {variants.map((v) => {
+                          const vBadge = statusBadge(v.status);
+                          const vExpanded = expandedRowId === v.id;
+                          return (
+                            <Fragment key={v.id}>
+                              <tr
+                                className={`border-b border-zinc-800/40 hover:bg-zinc-900/40 transition-colors cursor-pointer bg-zinc-950/50 ${vExpanded ? "bg-zinc-900/60" : ""}`}
+                                style={getRowBg(v) ? { backgroundColor: getRowBg(v) } : undefined}
+                                onClick={() => setExpandedRowId(vExpanded ? null : v.id)}
+                              >
+                                <td className="pl-1 pr-2 py-2">
+                                  <div className="flex items-center gap-0.5 pl-2">
+                                    {getRowBars(v).map((bar, i) => (
+                                      <div key={i} className="w-1 h-5 rounded-sm flex-shrink-0" style={{ backgroundColor: bar.color }} title={`${bar.field}: ${bar.value}`} />
+                                    ))}
+                                    <span className="text-zinc-700 text-[10px] ml-1">↳</span>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${focusDot(v.testFocus)}`} />
+                                    <span className="text-zinc-700 text-[10px]">{vExpanded ? "▼" : "▶"}</span>
+                                  </div>
+                                </td>
+                                                             <td className="px-3 py-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">VAR</span>
+                                    <span className="text-zinc-300">{v.name}</span>
+                                  </div>
+                                </td>
+                                {/* ── CLICKABLE DESIRE (variant) ── */}
+                                <td className="px-3 py-2">
+                                  <div
+                                    className="text-zinc-400 max-w-[160px] truncate cursor-pointer hover:text-orange-300 transition-colors"
+                                    style={fieldColor(v, "desire") ? { color: fieldColor(v, "desire") } : undefined}
+                                    title="Click to view/edit desire"
+                                    onClick={(e) => { e.stopPropagation(); openFieldEdit(v, "desire"); }}
+                                  >
+                                    {v.desire}
+                                  </div>
+                                </td>
+                                {/* ── CLICKABLE ANGLE (variant) ── */}
+                                <td className="px-3 py-2">
+                                  <div
+                                    className="text-zinc-400 max-w-[160px] truncate cursor-pointer hover:text-amber-300 transition-colors"
+                                    style={fieldColor(v, "angle") ? { color: fieldColor(v, "angle") } : undefined}
+                                    title="Click to view/edit angle"
+                                    onClick={(e) => { e.stopPropagation(); openFieldEdit(v, "angle"); }}
+                                  >
+                                    {v.angle}
+                                  </div>
+                                </td>
+                                                                <td className="px-3 py-2">
+                                  {v.targetAvatar ? (
+                                    <span
+                                      className="text-zinc-400 truncate block max-w-[120px] text-[11px] cursor-pointer hover:text-violet-300 transition-colors"
+                                      style={fieldColor(v, "targetAvatar") ? { color: fieldColor(v, "targetAvatar") } : undefined}
+                                      onClick={(e) => { e.stopPropagation(); openFieldEdit(v, "targetAvatar"); }}
+                                    >{v.targetAvatar}</span>
+                                  ) : (
+                                    <span
+                                      className="text-zinc-700 text-[10px] cursor-pointer hover:text-violet-400 transition-colors"
+                                      onClick={(e) => { e.stopPropagation(); openFieldEdit(v, "targetAvatar"); }}
+                                    >+ avatar</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2"><span className="text-[11px] text-yellow-300/60" style={fieldColor(v, "awareness") ? { color: fieldColor(v, "awareness") } : undefined}>{v.awareness}</span></td>
+                                <td className="px-3 py-2"><span className="text-[10px] text-fuchsia-300/60" style={fieldColor(v, "format") ? { color: fieldColor(v, "format"), borderColor: fieldColor(v, "format") } : undefined}>{v.format}</span></td>
+                                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}><MiniProgress ad={v} /></td>
+                                                              <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-end gap-1">
+                                    {(["winner","loser","testing"] as Ad["status"][]).map((s) => (
+                                      <button key={s} onClick={() => handleSetStatus(v.id, s)}
+                                        className={`w-5 h-5 rounded text-[9px] ${v.status === s ? (s === "winner" ? "bg-green-500/30 text-green-300" : s === "loser" ? "bg-red-500/30 text-red-300" : "bg-blue-500/20 text-blue-300") : "bg-zinc-800 text-zinc-600 hover:text-white"}`}>{s === "winner" ? "W" : s === "loser" ? "L" : "T"}</button>
+                                    ))}
+                                    <button onClick={() => openEditForm(v)} className="w-5 h-5 rounded text-[9px] bg-zinc-800 text-zinc-500 hover:text-white">✎</button>
+                                    <button onClick={() => confirmVariantDeleteId === v.id ? deleteVariantOnly(v.id) : setConfirmVariantDeleteId(v.id)}
+                                      className={`w-5 h-5 rounded text-[9px] ${confirmVariantDeleteId === v.id ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-600 hover:text-red-400"}`}>{confirmVariantDeleteId === v.id ? "?" : "✕"}</button>
+                                  </div>
+                                </td>
+                              </tr>
+                                                           {vExpanded && <ExpandedAdRow ad={v} colSpan={9} />}
+                            </Fragment>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </main>

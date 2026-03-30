@@ -1,5 +1,3 @@
-
-
 export type Niche = "Pet" | "Health" | "Beauty" | "Babies" | "Tech Gadgets";
 export const NICHES: Niche[] = ["Pet", "Health", "Beauty", "Babies", "Tech Gadgets"];
 
@@ -34,11 +32,12 @@ export type FormatType =
 export interface Ad {
   id: string;
   campaignId: string;
-  waveId?: string | null;  // ← ADD THIS
+  waveId?: string | null;
   name: string;
   desire: string;
   angle: string;
   awareness: AwarenessLevel;
+  targetAvatar: string;          // ← NEW
   notes: string;
   format: FormatType;
   testFocus: TestFocus;
@@ -101,3 +100,20 @@ export interface CboItemCopy {
   content: string;
   createdAt: string;
 }
+
+
+export function generateId(): string {
+  return (
+    Math.random().toString(36).substring(2, 9) +
+    "-" +
+    Math.random().toString(36).substring(2, 9)
+  );
+}
+
+export const nicheEmojis: { [key: string]: string } = {
+  Pet: "🐾",
+  Health: "💪",
+  Beauty: "✨",
+  Babies: "👶",
+  "Tech Gadgets": "📱",
+};

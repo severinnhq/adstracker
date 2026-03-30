@@ -139,6 +139,7 @@ export async function fetchCampaignWithAds(id: string): Promise<Campaign | null>
       angle: row.angle,
       waveId: row.wave_id || null,
       awareness: row.awareness as AwarenessLevel,
+      targetAvatar: row.target_avatar ?? "",          // ← NEW
       notes: row.notes ?? "",
       format: (row.format ?? "UGC") as FormatType,
       testFocus: (row.test_focus ?? "desire") as TestFocus,
@@ -159,16 +160,19 @@ export async function fetchCampaignWithAds(id: string): Promise<Campaign | null>
 
 export async function insertAd(campaignId: string, payload: {
   name: string; desire: string; angle: string; awareness: AwarenessLevel;
+  targetAvatar?: string;                                // ← NEW
   notes?: string; format: FormatType; testFocus: TestFocus;
   status: string; parentId?: string; createdAt?: string; duration: number;
-  waveId?: string | null;  // ← ADD
+  waveId?: string | null;
 }): Promise<string> {
   const data = await api("insertAd", {
     payload: {
       campaign_id: campaignId,
-      wave_id: payload.waveId || null,  // ← ADD
+      wave_id: payload.waveId || null,
       name: payload.name, desire: payload.desire, angle: payload.angle,
-      awareness: payload.awareness, notes: payload.notes || "",
+      awareness: payload.awareness,
+      target_avatar: payload.targetAvatar || "",        // ← NEW
+      notes: payload.notes || "",
       format: payload.format, test_focus: payload.testFocus,
       status: payload.status, parent_id: payload.parentId || null,
       created_at: payload.createdAt || new Date().toISOString(),
@@ -189,6 +193,7 @@ export async function updateAd(ad: Ad): Promise<void> {
       ad_desire: ad.desire,
       ad_angle: ad.angle,
       ad_awareness: ad.awareness,
+      ad_target_avatar: ad.targetAvatar ?? "",          // ← NEW
       ad_notes: ad.notes,
       ad_format: ad.format,
       ad_test_focus: ad.testFocus,

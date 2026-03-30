@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
       case "fetchAdCopies":
         result = await supabase
           .from("ad_copies")
-          .select("copy_id")
+          .select("copy_id, cbo_item_copies(*)")
           .eq("ad_id", params.adId);
         break;
 

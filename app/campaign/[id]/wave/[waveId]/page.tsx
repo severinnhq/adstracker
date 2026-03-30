@@ -17,6 +17,7 @@ import {
   fetchWaves,
   fetchFolders,
   insertFolder,
+  updateFolder,
   deleteFolder,
   fetchItemCopies,
   insertItemCopy,
@@ -89,14 +90,14 @@ const SECTION_META: {
     desc: "The hook or perspective you lead with.",
   },
   {
-    type: "awareness",
-    label: "Awareness",
-    singular: "Awareness Hook",
-    icon: "👁",
-    color: "text-yellow-300",
-    border: "border-yellow-500/30",
-    bg: "bg-yellow-500/5",
-    desc: "Awareness-level specific messaging.",
+    type: "avatar",
+    label: "Avatars",
+    singular: "Avatar",
+    icon: "👤",
+    color: "text-violet-300",
+    border: "border-violet-500/30",
+    bg: "bg-violet-500/5",
+    desc: "Customer avatars, segments, and personas.",
   },
   {
     type: "copy",
@@ -106,19 +107,9 @@ const SECTION_META: {
     color: "text-sky-300",
     border: "border-sky-500/30",
     bg: "bg-sky-500/5",
-    desc: "Full ad copy, scripts, headlines, CTAs.",
+    desc: "Ad copy, scripts, hooks, and text variations.",
   },
-  {
-    type: "combo",
-    label: "Combos",
-    singular: "Combo",
-    icon: "🧩",
-    color: "text-purple-300",
-    border: "border-purple-500/30",
-    bg: "bg-purple-500/5",
-    desc: "Ready-to-go desire + angle + awareness combinations.",
-  },
-];
+]; 
 
 function toLocalInputValue(iso: string) {
   const d = new Date(iso);
@@ -183,6 +174,76 @@ export default function WaveLibraryPage() {
   const [docCopy, setDocCopy] = useState<CboItemCopy | null>(null);
   const [docTitle, setDocTitle] = useState("");
   const [docContent, setDocContent] = useState("");
+    // View/edit item modal
+  const [viewItem, setViewItem] = useState<CboFolder | null>(null);
+  const [viewEditing, setViewEditing] = useState(false);
+  const [viewValue, setViewValue] = useState("");
+
+  // Doc sheet modal (desire + angle + avatar)
+  const [sheetItem, setSheetItem] = useState<CboFolder | null>(null);
+  const [sheetDesire, setSheetDesire] = useState("");
+  const [sheetAngle, setSheetAngle] = useState("");
+  const [sheetAvatar, setSheetAvatar] = useState("");
+
+  // Section-level Docs modal
+  const [showSectionDoc, setShowSectionDoc] = useState(false);
+  const [sectionDocContent, setSectionDocContent] = useState("");
+  const [sectionDocEditing, setSectionDocEditing] = useState(false);
+
+  const openViewItem = (item: CboFolder) => {
+    setViewItem(item);
+    setViewEditing(false);
+    setViewValue(getItemText(item));
+  };
+
+  const openSheet = (item: CboFolder) => {
+    setSheetItem(item);
+    setSheetDesire(item.desire || "");
+    setSheetAngle(item.angle || "");
+    setSheetAvatar(item.notes || "");
+  };
+
+  const openSectionDoc = () => {
+    // Load saved doc content from the section-level folder's content field
+    setSectionDocContent(currentSectionFolder?.content || "");
+    setSectionDocEditing(false);
+    setShowSectionDoc(true);
+  };
+
+  const handleSaveSectionDoc = async () => {
+    if (!currentSectionFolder) return;
+    await updateFolder(currentSectionFolder.id, {
+      content: sectionDocContent,
+    });
+    await reloadFolders();
+  };
+
+  const handleSheetSave = async () => {
+    if (!sheetItem) return;
+    await updateFolder(sheetItem.id, {
+      desire: sheetDesire.trim(),
+      angle: sheetAngle.trim(),
+      notes: sheetAvatar.trim(),
+    });
+    await reloadFolders();
+    setSheetItem(null);
+  };
+
+
+
+
+  const handleViewSave = async () => {
+    if (!viewItem) return;
+    const field =
+      activeSection === "desire" ? "desire"
+      : activeSection === "angle" ? "angle"
+      : activeSection === "avatar" ? "notes"
+      : activeSection === "copy" ? "content"
+      : "name";
+    await updateFolder(viewItem.id, { [field]: viewValue.trim() });
+    await reloadFolders();
+    setViewItem(null);
+  };
 
   // Create ad modal
   const [showAdForm, setShowAdForm] = useState(false);
@@ -200,7 +261,8 @@ export default function WaveLibraryPage() {
   const [adStartDate, setAdStartDate] = useState(
     new Date().toISOString()
   );
-  const [adNotes, setAdNotes] = useState("");
+   const [adNotes, setAdNotes] = useState("");
+  const [adTargetAvatar, setAdTargetAvatar] = useState("");
   const [selectedCopyIds, setSelectedCopyIds] = useState<string[]>([]);
 
   const reloadFolders = async () => {
@@ -234,6 +296,7 @@ export default function WaveLibraryPage() {
   // Load copies when expanding an item
   useEffect(() => {
     if (expandedId) loadCopiesFor(expandedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedId]);
 
   const root = folders.find((f) => f.type === "root");
@@ -250,14 +313,21 @@ export default function WaveLibraryPage() {
     ? childrenOf(currentSectionFolder.id)
     : [];
 
+  const sectionLabel = currentSection.label.toLowerCase();
+
+  const openAllDocs = () => {
+    currentItems.forEach((item) => openSheet(item));
+  };
+
   const getItemText = (item: CboFolder): string => {
     if (activeSection === "desire") return item.desire || item.name || "";
     if (activeSection === "angle") return item.angle || item.name || "";
-    if (activeSection === "awareness")
-      return item.awareness || item.name || "";
+    if (activeSection === "avatar") return item.notes || item.name || "";
     if (activeSection === "copy") return item.content || item.name || "";
     return item.name || "";
   };
+
+          
 
   const handleQuickAdd = async () => {
     const text = quickAddText.trim();
@@ -272,7 +342,7 @@ export default function WaveLibraryPage() {
 
     if (activeSection === "desire") payload.desire = text;
     else if (activeSection === "angle") payload.angle = text;
-    else if (activeSection === "awareness") payload.awareness = text;
+    else if (activeSection === "avatar") payload.notes = text;
     else if (activeSection === "copy") payload.content = text;
     else payload.name = text;
 
@@ -340,8 +410,8 @@ export default function WaveLibraryPage() {
     setAdTestFocus(
       activeSection === "angle"
         ? "angle"
-        : activeSection === "awareness"
-        ? "awareness"
+        : activeSection === "avatar"
+        ? "desire"
         : "desire"
     );
     setAdDuration(7);
@@ -369,7 +439,8 @@ export default function WaveLibraryPage() {
       duration: adDuration,
       createdAt: adStartDate,
       notes: adNotes,
-      waveId: waveId,  // ← ADD THIS — ties the ad to this specific wave
+      waveId: waveId,
+      targetAvatar: adTargetAvatar.trim(),
     });
 
     if (selectedCopyIds.length > 0) {
@@ -478,6 +549,96 @@ export default function WaveLibraryPage() {
         </div>
       )}
 
+      {/* View/edit item modal */}
+      {viewItem && (() => {
+        const originalText = getItemText(viewItem);
+        const hasChanges = viewValue !== originalText;
+        const sectionColors: Record<string, { border: string; bg: string; text: string; label: string; ring: string }> = {
+          desire: { border: "border-orange-500", bg: "bg-orange-500/10", text: "text-orange-400", label: "🎯 Desire", ring: "focus:ring-orange-500/40" },
+          angle: { border: "border-amber-500", bg: "bg-amber-500/10", text: "text-amber-400", label: "📐 Angle", ring: "focus:ring-amber-500/40" },
+          awareness: { border: "border-yellow-500", bg: "bg-yellow-500/10", text: "text-yellow-400", label: "👁 Awareness", ring: "focus:ring-yellow-500/40" },
+          copy: { border: "border-sky-500", bg: "bg-sky-500/10", text: "text-sky-400", label: "📝 Copy", ring: "focus:ring-sky-500/40" },
+          combo: { border: "border-purple-500", bg: "bg-purple-500/10", text: "text-purple-400", label: "🧩 Combo", ring: "focus:ring-purple-500/40" },
+        };
+        const colors = sectionColors[activeSection] || sectionColors.desire;
+
+        return (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewItem(null)}>
+            <div
+              className={`bg-zinc-900 border ${colors.border} rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`flex items-center justify-between px-5 py-3 border-b ${colors.border}/30`}>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-bold ${colors.text}`}>{colors.label}</span>
+                  <span className="text-[11px] text-zinc-500">— {viewItem.name?.slice(0, 40)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!viewEditing && (
+                    <CopyBtn text={viewValue} />
+                  )}
+                  {!viewEditing && (
+                    <button
+                      onClick={() => setViewEditing(true)}
+                      className="px-3 py-1 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+                    >
+                      ✎ Edit
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setViewItem(null)}
+                    className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 flex items-center justify-center text-sm transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {viewEditing ? (
+                  <textarea
+                    value={viewValue}
+                    onChange={(e) => setViewValue(e.target.value)}
+                    autoFocus
+                    rows={10}
+                    className={`w-full bg-zinc-800 border ${colors.border}/40 rounded-lg px-4 py-3 text-sm text-zinc-200 leading-relaxed focus:outline-none focus:ring-2 ${colors.ring} resize-y min-h-[200px]`}
+                  />
+                ) : (
+                  <div className={`rounded-lg p-4 border ${colors.border}/20 ${colors.bg}`}>
+                    <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                      {viewValue || <span className="text-zinc-600 italic">Empty</span>}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {viewEditing && (
+                <div className={`flex items-center justify-between px-5 py-3 border-t ${colors.border}/30`}>
+                  <div className="text-[11px] text-zinc-500">
+                    {hasChanges ? <span className="text-yellow-400">● Unsaved changes</span> : <span>No changes</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setViewValue(originalText); setViewEditing(false); }}
+                      className="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-400 hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleViewSave}
+                      disabled={!hasChanges}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        hasChanges ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                      } disabled:opacity-50`}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Create ad modal */}
       {showAdForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -501,6 +662,12 @@ export default function WaveLibraryPage() {
                 onChange={(e) => setAdAngle(e.target.value)}
                 placeholder="Angle *"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <input
+                value={adTargetAvatar}
+                onChange={(e) => setAdTargetAvatar(e.target.value)}
+                placeholder="Target avatar (e.g. 35-45 busy moms, dog owners 25-40)"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
               />
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-zinc-400">Start:</span>
@@ -663,6 +830,93 @@ export default function WaveLibraryPage() {
         </div>
       )}
 
+      {/* Section Docs modal */}
+      {showSectionDoc && (() => {
+        const savedContent = currentSectionFolder?.content || "";
+        const hasChanges = sectionDocContent !== savedContent;
+        return (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowSectionDoc(false)}>
+            <div
+              className={`bg-zinc-900 border ${currentSection.border} rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className={`flex items-center justify-between px-5 py-3 border-b ${currentSection.border}`}>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-bold ${currentSection.color}`}>
+                    📄 {currentSection.label} — Docs
+                  </span>
+                  {hasChanges && (
+                    <span className="text-[10px] text-yellow-400">● Unsaved</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <CopyBtn text={sectionDocContent} />
+                  {!sectionDocEditing ? (
+                    <button
+                      onClick={() => setSectionDocEditing(true)}
+                      className="px-3 py-1 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+                    >
+                      ✎ Edit
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={async () => {
+                          await handleSaveSectionDoc();
+                          setSectionDocEditing(false);
+                        }}
+                        disabled={!hasChanges}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          hasChanges
+                            ? "bg-blue-600 text-white hover:bg-blue-500"
+                            : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                        }`}
+                      >
+                        💾 Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSectionDocContent(savedContent);
+                          setSectionDocEditing(false);
+                        }}
+                        className="px-3 py-1 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setShowSectionDoc(false)}
+                    className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 flex items-center justify-center text-sm transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {sectionDocEditing ? (
+                  <textarea
+                    value={sectionDocContent}
+                    onChange={(e) => setSectionDocContent(e.target.value)}
+                    autoFocus
+                    className={`w-full min-h-[500px] bg-zinc-800 border ${currentSection.border} rounded-lg px-5 py-4 text-sm text-zinc-200 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-y font-mono`}
+                  />
+                ) : (
+                  <div className={`rounded-lg p-5 border ${currentSection.border} ${currentSection.bg} min-h-[400px]`}>
+                    <pre className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap font-sans">
+                      {sectionDocContent || <span className="text-zinc-600 italic">Click Edit to start writing your {currentSection.label.toLowerCase()} doc.</span>}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header */}
       <header className="border-b border-zinc-800 sticky top-0 bg-zinc-950/90 backdrop-blur-md z-40">
         <div className="max-w-5xl mx-auto px-6 py-4">
@@ -676,7 +930,7 @@ export default function WaveLibraryPage() {
             📂 {wave.name} — Vault
           </h1>
           <div className="flex gap-1 mt-3 overflow-x-auto">
-            {SECTION_META.map((sec) => {
+            {SECTION_META.map((sec: (typeof SECTION_META)[number]) => {
               const isActive = activeSection === sec.type;
               const section = sectionFor(sec.type);
               const count = section
@@ -737,9 +991,17 @@ export default function WaveLibraryPage() {
             </button>
           </div>
 
-          <p className="text-[11px] text-zinc-500 mb-4">
-            {currentSection.desc}
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] text-zinc-500">
+              {currentSection.desc}
+            </p>
+            <button
+              onClick={openSectionDoc}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border ${currentSection.border} ${currentSection.color} hover:bg-white/5 transition-colors flex items-center gap-1.5`}
+            >
+              📄 Docs
+            </button>
+          </div>
 
           {/* Items list */}
           {currentItems.length === 0 ? (
@@ -763,21 +1025,28 @@ export default function WaveLibraryPage() {
                     className="border border-zinc-700/50 rounded-lg bg-zinc-900/80 hover:bg-zinc-900 transition-colors overflow-hidden"
                   >
                     <div className="flex items-center gap-3 px-4 py-3">
-                      <div
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() =>
-                          setExpandedId(
-                            isExpanded ? null : item.id
-                          )
-                        }
-                      >
-                        <div className="text-sm">{text}</div>
-                        {copies.length > 0 && !isExpanded && (
-                          <div className="text-[10px] text-zinc-500 mt-0.5">
-                            📝 {copies.length} copy
-                            {copies.length !== 1 ? "ies" : ""} attached
-                          </div>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={`text-sm truncate max-w-[400px] cursor-pointer hover:${currentSection.color} transition-colors`}
+                          title="Click to view full text"
+                          onClick={() => openViewItem(item)}
+                        >
+                          {text}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {copies.length > 0 && !isExpanded && (
+                            <div className="text-[10px] text-zinc-500">
+                              📝 {copies.length} copy
+                              {copies.length !== 1 ? "ies" : ""} attached
+                            </div>
+                          )}
+                          <button
+                            className="text-zinc-600 text-[10px] hover:text-zinc-300"
+                            onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                          >
+                            {isExpanded ? "▼ collapse" : "▶ expand"}
+                          </button>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -804,16 +1073,7 @@ export default function WaveLibraryPage() {
                         >
                           {confirmDeleteId === item.id ? "OK?" : "✕"}
                         </button>
-                        <span
-                          className="text-zinc-500 text-xs cursor-pointer"
-                          onClick={() =>
-                            setExpandedId(
-                              isExpanded ? null : item.id
-                            )
-                          }
-                        >
-                          {isExpanded ? "▼" : "▶"}
-                        </span>
+
                       </div>
                     </div>
 
